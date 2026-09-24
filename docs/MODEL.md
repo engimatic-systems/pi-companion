@@ -8,16 +8,29 @@ ownership roles. Terms are defined in the [glossary](GLOSSARY.md); the
 
 ## Identity and local knowledge
 
-Let `I` be the set of valid conversation IDs. A reference is the ID itself.
-Conversation `c ∈ I` has local destination knowledge:
+Let $I$ be the set of valid conversation IDs. A reference is the ID itself.
+For each conversation $c \in I$, its persistent state currently contains only
+its local destination collection:
 
-```text
-D_c ⊆ I \ {c}
+```math
+S_c \coloneqq \langle D_c \rangle,
+\qquad D_c \subseteq I \setminus \{c\}.
 ```
 
-Identity determines addressing and the key for stored knowledge; these are not
-independently chosen identities. Address agreement assumes a shared addressing
-convention. References confer neither authority nor availability.
+Within the host's identity namespace, define resolved transport and state
+locations:
+
+```math
+\operatorname{dest}: I \to L_{\mathrm{transport}},
+\qquad \operatorname{state}: I \to L_{\mathrm{state}}.
+```
+
+$\operatorname{dest}(c)$ is where to contact $c$;
+$\operatorname{state}(c)$ is where $S_c$ belongs. Both locations are derived from
+identity, not independently chosen identities. Resolution establishes neither
+existence, accessibility nor validity at either location. Address agreement
+assumes a shared addressing convention; references confer neither authority
+nor availability.
 
 Keep three facts separate: **identity**, **local introduction**, and current
 **availability**. Destination sets form a directed graph of knowledge, not an
@@ -25,22 +38,25 @@ ownership tree, access-control list or registry of running conversations.
 
 ## State transitions
 
-Introducing `d ≠ c` to `c`, and locally forgetting it, respectively:
+Introducing $d \ne c$ to $c$, and locally forgetting it, respectively:
 
-```text
-introduce(c, d):  D_c' = D_c ∪ {d}
-forget(c, d):     D_c' = D_c \ {d}
+```math
+\begin{aligned}
+\operatorname{introduce}(c,d)&: S_c' = \langle D_c \cup \{d\} \rangle, \\
+\operatorname{forget}(c,d)&: S_c' = \langle D_c \setminus \{d\} \rangle.
+\end{aligned}
 ```
 
 Introduction is idempotent; self-introduction does nothing. Forgetting changes
 neither the other conversation nor its knowledge, and does not forbid later
 reintroduction.
 
-Successful creation chooses a fresh identity `d` and introduces both peers:
+Successful creation chooses a fresh identity $d$ and introduces both peers,
+with the creator as the fresh conversation's initial destination:
 
-```text
-D_c' = D_c ∪ {d}
-D_d' = {c}          # initial knowledge of the fresh conversation
+```math
+S_c' = \langle D_c \cup \{d\} \rangle,
+\qquad S_d' = \langle \{c\} \rangle.
 ```
 
 Receiving a message introduces its sender before local delivery. The sender need
@@ -54,24 +70,36 @@ being adopted or reported as successful. A failed save leaves the prior
 collection authoritative and reports the failure; it does not roll back external
 effects such as a conversation already created.
 
-Knowledge belongs to the native identity, not one running instance or a branch
-of its history. Reload and clean exit/same-ID resume load that identity's stored
-collection. Missing state starts empty; unreadable or corrupt state is a failure,
+$S_c$ belongs to the native identity, not one running instance or a branch of
+its history. Reload and clean exit/same-ID resume load $S_c$ from
+$\operatorname{state}(c)$. Missing state starts with
+$S_c = \langle \varnothing \rangle$; unreadable or corrupt state is a failure,
 not empty knowledge. Different identities have independent collections.
 
 ## Messaging and outcomes
 
-Submission targets a locally known destination. All messages are ordinary,
-including optional text submitted after creation. Creation and that submission
-are separate operations: a failed send does not undo successful creation.
+For an ordinary message $m$ from $c$ to $d$, write host submission as:
+
+```math
+\operatorname{submit}(c,d,m) \rightsquigarrow o,
+\qquad o \in \{\mathrm{accepted},\mathrm{unavailable},
+              \mathrm{rejected},\mathrm{indeterminate}\}.
+```
+
+The public send operation requires $d \in D_c$. The notation above describes
+the host exchange, not local validation or persistence failures. Optional text
+after creation uses the same ordinary submission; a failed send does not undo
+successful creation.
 
 Acceptance means the host accepted the submission, not that the agent read it,
-finished work, or processed it exactly once. A failed exchange after possible
-delivery can be indeterminate; no message is automatically replayed.
+finished work, or processed it exactly once. Indeterminate delivery expresses
+uncertainty at the sender; it does not imply that $S_d$ stayed unchanged.
+No message is automatically replayed.
 
-Reported unavailability causes local forgetting, subject to the same persistence
-rule. Rejection and indeterminate delivery retain the destination. Availability
-can change without changing identity, and knowing a peer does not keep it running.
+An $\mathrm{unavailable}$ outcome invokes $\operatorname{forget}(c,d)$, subject
+to the persistence rule. The other outcomes cause no submission-induced change
+to $D_c$. Availability can change without changing identity, and knowing a peer
+does not keep it running.
 
 ## Assumptions and limits
 
