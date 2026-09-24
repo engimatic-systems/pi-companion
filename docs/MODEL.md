@@ -8,13 +8,15 @@ ownership roles. Terms are defined in the [glossary](GLOSSARY.md); the
 
 ## Identity and local knowledge
 
-Let $I$ be the set of valid conversation IDs. A reference is the ID itself.
-For each conversation $c \in I$, its persistent state currently contains only
-its local destination collection:
+Let $C$ be the set of conversations and $I$ the set of valid identifiers.
+Each conversation $c \in C$ has a unique identifier $c_i \in I$. The subscript
+$i$ means "identifier," not a sequence index. A reference is an identifier,
+not the conversation itself.
+
+Conversation $c$ maintains its own local destination knowledge:
 
 ```math
-S_c \coloneqq \langle D_c \rangle,
-\qquad D_c \subseteq I \setminus \{c\}.
+D_c \subseteq I \setminus \{c_i\}.
 ```
 
 Within the host's identity namespace, define resolved transport and state
@@ -25,25 +27,28 @@ locations:
 \qquad \mathrm{state}: I \to L_{\mathrm{state}}.
 ```
 
-$\mathrm{dest}(c)$ is where to contact $c$;
-$\mathrm{state}(c)$ is where $S_c$ belongs. Both locations are derived from
-identity, not independently chosen identities. Resolution establishes neither
-existence, accessibility nor validity at either location. Address agreement
-assumes a shared addressing convention; references confer neither authority
-nor availability.
+$\mathrm{dest}(c_i)$ is where to contact $c$;
+$\mathrm{state}(c_i)$ is its persistent-state location. Both locations are
+derived from $c_i$, not independently maintained facts. Resolution establishes
+neither existence, accessibility nor validity at either location. Address
+agreement assumes a shared addressing convention; references confer neither
+authority nor availability.
 
 Keep three facts separate: **identity**, **local introduction**, and current
 **availability**. Destination sets form a directed graph of knowledge, not an
 ownership tree, access-control list or registry of running conversations.
+For $c,d \in C$, knowing $d_i \in D_c$ establishes neither $c_i \in D_d$ nor
+the current availability of $d$.
 
-## State transitions
+## Model operations
 
-Introducing $d \ne c$ to $c$, and locally forgetting it, respectively:
+For a reference $r \in I$ with $r \ne c_i$, model operations determine the
+next destination collection $D_c'$:
 
 ```math
 \begin{aligned}
-\mathrm{introduce}(c,d)&: S_c' = \langle D_c \cup \{d\} \rangle, \\
-\mathrm{forget}(c,d)&: S_c' = \langle D_c \setminus \{d\} \rangle.
+\mathrm{introduce}(c,r)&: D_c' = D_c \cup \{r\}, \\
+\mathrm{forget}(c,r)&: D_c' = D_c \setminus \{r\}.
 \end{aligned}
 ```
 
@@ -51,52 +56,68 @@ Introduction is idempotent; self-introduction does nothing. Forgetting changes
 neither the other conversation nor its knowledge, and does not forbid later
 reintroduction.
 
-Successful creation chooses a fresh identity $d$ and introduces both peers,
-with the creator as the fresh conversation's initial destination:
+Successful creation of conversation $d$ chooses a fresh identifier $d_i$ and
+introduces both peers, with the creator as the new conversation's initial
+destination:
 
 ```math
-S_c' = \langle D_c \cup \{d\} \rangle,
-\qquad S_d' = \langle \{c\} \rangle.
+D_c' = D_c \cup \{d_i\},
+\qquad D_d' = \{c_i\}.
 ```
 
-Receiving a message introduces its sender before local delivery. The sender need
-not already belong to the receiver's destination set. Thus a message from a
-forgotten peer can introduce it again.
+Receiving a message from $c$ at $d$ invokes $\mathrm{introduce}(d,c_i)$ before
+local delivery. The sender's identifier need not already belong to $D_d$.
+Thus a message from a forgotten peer can introduce it again.
 
 ## Persistence and lifetime
 
-Transitions above describe successful saves: changed knowledge is stored before
-being adopted or reported as successful. A failed save leaves the prior
-collection authoritative and reports the failure; it does not roll back external
+Let $P_c$ denote the persistent representation belonging to $c$. It currently
+contains only destination knowledge, derived from the model rather than chosen
+independently:
+
+```math
+P_c = \langle D_c \rangle.
+```
+
+For a proposed model change $D_c'$, the corresponding representation is:
+
+```math
+P_c' = \langle D_c' \rangle.
+```
+
+Store $P_c'$ successfully at $\mathrm{state}(c_i)$ before adopting $D_c'$ or
+reporting the change as successful. A failed save leaves the previous model
+state authoritative and reports the failure; it does not roll back external
 effects such as a conversation already created.
 
-$S_c$ belongs to the native identity, not one running instance or a branch of
-its history. Reload and clean exit/same-ID resume load $S_c$ from
-$\mathrm{state}(c)$. Missing state starts with
-$S_c = \langle \varnothing \rangle$; unreadable or corrupt state is a failure,
-not empty knowledge. Different identities have independent collections.
+Stored knowledge is keyed by $c_i$, not one running instance or a branch of its
+history. Reload and clean exit/same-ID resume recover $D_c$ from $P_c$ at
+$\mathrm{state}(c_i)$. Missing state starts with $D_c = \varnothing$; unreadable
+or corrupt state is a failure, not empty knowledge. Different identities have
+independent collections.
 
 ## Messaging and outcomes
 
-For an ordinary message $m$ from $c$ to $d$, write host submission as:
+For an ordinary message $m$ from $c \in C$ to reference $r \in I$, write host
+submission as:
 
 ```math
-\mathrm{submit}(c,d,m) \rightsquigarrow o,
+\mathrm{submit}(c,r,m) \rightsquigarrow o,
 \qquad o \in \{\mathrm{accepted},\mathrm{unavailable},
               \mathrm{rejected},\mathrm{indeterminate}\}.
 ```
 
-The public send operation requires $d \in D_c$. The notation above describes
+The public send operation requires $r \in D_c$. The notation above describes
 the host exchange, not local validation or persistence failures. Optional text
 after creation uses the same ordinary submission; a failed send does not undo
 successful creation.
 
 Acceptance means the host accepted the submission, not that the agent read it,
 finished work, or processed it exactly once. Indeterminate delivery expresses
-uncertainty at the sender; it does not imply that $S_d$ stayed unchanged.
-No message is automatically replayed.
+uncertainty at the sender; it does not imply that the receiver's model or
+persistent state stayed unchanged. No message is automatically replayed.
 
-An $\mathrm{unavailable}$ outcome invokes $\mathrm{forget}(c,d)$, subject
+An $\mathrm{unavailable}$ outcome invokes $\mathrm{forget}(c,r)$, subject
 to the persistence rule. The other outcomes cause no submission-induced change
 to $D_c$. Availability can change without changing identity, and knowing a peer
 does not keep it running.
