@@ -1,112 +1,10 @@
-# Companion design
+# Companion architecture
 
-Companion preserves conversational context and isolates responsibility through
-independently accessible conversations. Work and history stay local unless
-explicitly communicated. Conversational separation is not a filesystem sandbox.
-
-Terms are defined in the [glossary](GLOSSARY.md); the [README](../README.md) owns
-installation, command spelling, launch-selection rules and operational limits.
-This document owns the model and its implementation responsibilities.
-
-## Principles
-
-**Define the constraints; make them true by construction.**
-
-**Keep one fact; derive the next.**
-
-Prefer fewer independent choices over machinery that keeps separately chosen
-facts consistent. These principles call for less state, not automatically more
-types or validation layers.
-
-## Identity and state
-
-Let `I` be the set of valid conversation IDs. A conversation's identity and its
-reference are the same value `c ∈ I`. Its local model is `(c, D_c)`, where:
-
-```text
-D_c ⊆ I \ {c}
-```
-
-References are safe, bounded native session IDs. HostConnection chooses a fresh
-ID before launch, passes it through Pi `--session-id`, and derives its socket
-address from it. Session state is also keyed by that ID. Transcript paths,
-addresses, process handles and status are not additional identities.
-
-For processes agreeing on a socket root:
-
-```text
-address : I → Address
-```
-
-Each connection resolves `socketRoot = tmpdir()` once. Addresses take the form
-`<socketRoot>/pi-companion-<uid>/<id>.sock`, with a checked platform path limit.
-The listener directory is private to the user. There is no socket-root setting
-or propagation channel. This establishes address correspondence, not availability
-or enforced exclusivity of an ID.
-
-### Introductions and forgetting
-
-Successful creation of a fresh conversation `d` by `c` introduces both peers:
-
-```text
-D_c' = D_c ∪ {d}
-D_d' = {c}
-```
-
-Every received message from `e` to `d` introduces its sender before local Pi
-delivery:
-
-```text
-D_d' = D_d ∪ {e}       # e ≠ d
-```
-
-Introduction is idempotent; self-introduction has no effect. A sender does not
-need to be in the receiver's destination set. References are knowledge, not
-credentials, and destination sets are not inbound access-control lists.
-
-Forgetting is local:
-
-```text
-D_c' = D_c \ {d}
-```
-
-It changes neither `d` nor `D_d` and does not prevent reintroduction. The resulting
-structure is a directed graph of knowledge, not a tree of owned conversations.
-Every conversation has the same operations, without roles or spawning privileges.
-
-These transitions describe successful saves, not a cross-conversation transaction.
-A receiving save or creator-side save can fail after a process was launched.
-The process may remain; there is no external-effect rollback or silent relaunch.
-
-### Persistent collection
-
-Companion owns synchronous load/save at
-`<getAgentDir()>/companion/<native-session-id>.json`. The Pi entrypoint supplies
-the configured agent directory; tests supply isolated directories. The file is
-a JSON array of destination references, not an envelope repeating the owner,
-socket path or status. Identity is derived from its filename.
-
-Construction loads and validates the complete array, deduplicating and excluding
-self without rewriting the file. A missing file starts empty. Other read errors,
-invalid JSON and invalid references throw an exception with exact path and
-underlying cause; the file is not replaced with guessed empty state.
-
-A real introduction or forgetting computes the next set, writes a temporary
-sibling file, renames it over the state file, then adopts the change in memory.
-A failed save throws and leaves the prior in-memory set authoritative. No-op
-mutations do not require writable storage. Temporary-file cleanup must not mask
-the original failure.
-
-This is a concrete implementation inside Companion, not a generic storage
-framework or Runtime mutate/save/rollback protocol. It assumes one active
-instance per native ID without locking. No journal, retries, automatic repair,
-fsync or strong crash-durability guarantee is provided.
-
-The file is current conversation knowledge, not transcript-branch state. Every
-startup, reload or same-ID resume loads it through ordinary construction. New
-IDs address different files. Shutdown stops communication resources; it does not
-capture destination state. Persistence cannot establish availability or recover
-interrupted operations.
+This document describes how the modules and host integration realize the
+[model](MODEL.md). Terms are defined in the [glossary](GLOSSARY.md); the
+[README](../README.md) owns installation, command spelling, launch-selection
+rules and operational limits. Implementation practices belong in the
+[style guide](STYLE_GUIDE.md).
 
 ## Modules and reading path
 
@@ -146,6 +44,46 @@ The Host is the existing shared environment—Herdr, Pi processes and filesystem
 resources—not an object created by the extension. Runtime holds one logical
 HostConnection. Releasing it stops its listener, not the shared Host, conversation,
 or other conversations.
+
+## Identity and addressing
+
+References are safe, bounded native session IDs. HostConnection chooses a fresh
+ID before launch, passes it through Pi `--session-id`, and derives its socket
+address from it. Session state is keyed by the same ID rather than independently
+supplied addressing or transcript information.
+
+Each connection resolves `socketRoot = tmpdir()` once. Addresses take the form
+`<socketRoot>/pi-companion-<uid>/<id>.sock`, with a checked platform path limit.
+The listener directory is private to the user. There is no socket-root setting
+or propagation channel. Participants must resolve the same root; this realizes
+the model's addressing assumption without establishing availability or enforced
+exclusivity of an ID.
+
+## Persistent collection
+
+Companion owns synchronous load/save at
+`<getAgentDir()>/companion/<native-session-id>.json`. The Pi entrypoint supplies
+the configured agent directory; tests supply isolated directories. The file is
+a JSON array of destination references, not an envelope repeating the owner,
+socket path or status. Identity is derived from its filename.
+
+Construction loads and validates the complete array, deduplicating and excluding
+self without rewriting the file. A missing file starts empty. Other read errors,
+invalid JSON and invalid references throw an exception with exact path and
+underlying cause; the file is not replaced with guessed empty state.
+
+To realize the model's save-before-adopt rule, a real introduction or forgetting
+computes the next set, writes a temporary sibling file, renames it over the state
+file, then adopts the change in memory. No-op mutations do not require writable
+storage. Temporary-file cleanup must not mask the original failure.
+
+This is a concrete implementation inside Companion, not a generic storage
+framework or Runtime mutate/save/rollback protocol. There are no locks, journals,
+retries, automatic repairs or fsync calls. Synchronous I/O can briefly block Pi.
+
+Every startup, reload or same-ID resume loads state through ordinary construction.
+New IDs address different files. Shutdown stops communication resources; it does
+not capture destination state or write it into the transcript.
 
 ## Operation composition
 
@@ -267,14 +205,3 @@ Runtime alone decides their destination-state consequences.
 Source JSDoc explains the precise framing and competing-event mechanics. These
 obligations do not require a configurable transport framework or exposing every
 private parser.
-
-## Checking a change against the model
-
-- Does it implement a model rule, Runtime policy, HostConnection operation or
-  Transport guarantee at the module that owns it?
-- Does it maintain independent facts that can instead be derived from one ID?
-- Does it enforce a consistency guarantee the workflow does not require?
-- Does it confuse identity, local introduction, or current availability?
-
-Loss of availability does not change identity. Forgetting changes knowledge,
-not the other conversation's existence. Keep those facts separate.

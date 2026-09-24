@@ -158,6 +158,10 @@ npm test
 ```
 
 Tests include strict typechecking, behavior tests, and real Pi package discovery.
-See [development guidance](docs/DEVELOPMENT.md) for prerequisites and validation,
-[the glossary](docs/GLOSSARY.md) for vocabulary, and
-[the design](docs/DESIGN.md) for the model and module contracts.
+Further reading:
+
+- [MODEL.md](docs/MODEL.md): the small semantic model and its limits.
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md): modules and host integration.
+- [GLOSSARY.md](docs/GLOSSARY.md): authoritative vocabulary.
+- [CONTRIBUTING.md](docs/CONTRIBUTING.md): development setup, tests and review.
+- [STYLE_GUIDE.md](docs/STYLE_GUIDE.md): implementation and documentation practices.

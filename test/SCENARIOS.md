@@ -4,7 +4,7 @@ Durable coverage follows the conversation-local `Companion` model, `Runtime`
 orchestration, command composition, `HostConnection` live-session access, and
 the deep `Transport` module. Real Pi/Herdr behavior is checked separately with
 actual package loading and owned isolated resources. See
-[development guidance](../docs/DEVELOPMENT.md) for the test commands.
+[contribution guidance](../docs/CONTRIBUTING.md) for the test commands.
 
 ## Companion model and persistence
 
