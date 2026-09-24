@@ -134,6 +134,8 @@ actual package loading and owned isolated resources. See
 
 - A real Pi process discovers `src/index.ts` through the package manifest,
   registering exactly the Companion command and tool from that entrypoint.
+- The same package supplies `skills/companions/SKILL.md`, discovered as
+  `skill:companions` with that file's provenance and no external skill dependency.
 - Root test scripts include strict typechecking, behavior tests and the real
   package-discovery seam.
 - A standalone production checkout resolves its runtime dependencies at the

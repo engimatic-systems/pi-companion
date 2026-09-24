@@ -16,7 +16,8 @@
     "test": "npm run typecheck && npm run test:runtime && npm run test:package"
   },
   "pi": {
-    "extensions": ["./src/index.ts"]
+    "extensions": ["./src/index.ts"],
+    "skills": ["./skills"]
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",

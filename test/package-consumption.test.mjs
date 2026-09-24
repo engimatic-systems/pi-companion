@@ -44,7 +44,7 @@ async function stop(child) {
   });
 }
 
-test("Pi discovers Companion through the package manifest", async () => {
+test("Pi discovers the Companion extension and skill through the package manifest", async () => {
   const directory = mkdtempSync(join(tmpdir(), "companion-package-test-"));
   const agentDir = join(directory, "agent");
   const outputPath = join(directory, "registrations.json");
@@ -72,7 +72,6 @@ test("Pi discovers Companion through the package manifest", async () => {
   let stderr = "";
   const child = spawn(pi, [
     "--mode", "rpc",
-    "--no-skills",
     "--no-prompt-templates",
     "--no-themes",
     "--no-context-files",
@@ -84,6 +83,7 @@ test("Pi discovers Companion through the package manifest", async () => {
     cwd: root,
     env: {
       ...environment,
+      HOME: directory,
       PI_CODING_AGENT_DIR: agentDir,
       PI_OFFLINE: "1",
     },
@@ -107,6 +107,10 @@ test("Pi discovers Companion through the package manifest", async () => {
     assert.deepEqual(companionTools.map((tool) => tool.name), ["companion"]);
     assert.equal(registrations.commands.filter((command) => command.name === "companion").length, 1);
     assert.equal(registrations.tools.filter((tool) => tool.name === "companion").length, 1);
+
+    const skills = registrations.commands.filter((command) => command.source === "skill");
+    assert.deepEqual(skills.map((skill) => skill.name), ["skill:companions"]);
+    assert.equal(skills[0].sourceInfo.path, join(root, "skills", "companions", "SKILL.md"));
   } finally {
     await stop(child);
     const socketRemoved = await waitForAbsent(socketPath);

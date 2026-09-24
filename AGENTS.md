@@ -9,6 +9,9 @@ destination knowledge. Before changing behavior, read:
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): style and validation.
 - [test/SCENARIOS.md](test/SCENARIOS.md): behavioral obligations.
 
+The package also includes [skills/companions/SKILL.md](skills/companions/SKILL.md)
+for bounded work in independent conversations. Read it when that trigger matches.
+
 Maintained docs describe current contracts; planning, review history and test-run
 evidence belong in tickets or review artifacts. Surface conflicts between the
 assignment, guidance and implementation instead of guessing. Bounded work does

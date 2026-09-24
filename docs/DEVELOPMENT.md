@@ -16,7 +16,7 @@ npm test
 ```
 
 `npm test` runs strict TypeScript checking, the TypeScript behavior tests, and a
-real Pi package-discovery test. `npm run test:runtime` and
+real Pi extension-and-skill discovery test. `npm run test:runtime` and
 `npm run test:package` run those suites separately. The discovery test uses the
 installed development Pi binary by default; set `PI_PACKAGE_TEST_PI` to an
 absolute Pi executable path to exercise another supported installation.
@@ -45,7 +45,7 @@ Durable tests follow the semantic interfaces, not private helpers:
 | Pi registration, presentation and lifecycle | `test/index.test.ts` |
 | HostConnection and launch | `test/host.test.ts` |
 | Transport exchange and ownership | `test/transport.test.ts` |
-| Real Pi package discovery | `test/package-consumption.test.mjs` |
+| Real Pi extension and skill discovery | `test/package-consumption.test.mjs` |
 
 The detailed obligation inventory is [test/SCENARIOS.md](../test/SCENARIOS.md).
 Keep it aligned with the tests; do not encode implementation machinery as a

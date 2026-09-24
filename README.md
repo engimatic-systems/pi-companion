@@ -22,7 +22,9 @@ pi
 Pi registers the local checkout as a package; it does not copy it or prepare its
 dependencies. Keep that checkout at the revision you intend to run. Restart or
 reload Pi after changing it. The package exposes the `/companion` command and
-`companion` tool.
+`companion` tool. It also includes the [companions skill](skills/companions/SKILL.md)
+for scoping delegated work, exchanging selected context, and checking results.
+Pi discovers it with the package; invoke `/skill:companions` to load it explicitly.
 
 A local directory passed to `--extension` does not consume its package manifest.
 Use `pi install` for the checkout. `--no-extensions` disables installed packages.
