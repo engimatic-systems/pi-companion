@@ -21,12 +21,12 @@ Within the host's identity namespace, define resolved transport and state
 locations:
 
 ```math
-\operatorname{dest}: I \to L_{\mathrm{transport}},
-\qquad \operatorname{state}: I \to L_{\mathrm{state}}.
+\mathrm{dest}: I \to L_{\mathrm{transport}},
+\qquad \mathrm{state}: I \to L_{\mathrm{state}}.
 ```
 
-$\operatorname{dest}(c)$ is where to contact $c$;
-$\operatorname{state}(c)$ is where $S_c$ belongs. Both locations are derived from
+$\mathrm{dest}(c)$ is where to contact $c$;
+$\mathrm{state}(c)$ is where $S_c$ belongs. Both locations are derived from
 identity, not independently chosen identities. Resolution establishes neither
 existence, accessibility nor validity at either location. Address agreement
 assumes a shared addressing convention; references confer neither authority
@@ -42,8 +42,8 @@ Introducing $d \ne c$ to $c$, and locally forgetting it, respectively:
 
 ```math
 \begin{aligned}
-\operatorname{introduce}(c,d)&: S_c' = \langle D_c \cup \{d\} \rangle, \\
-\operatorname{forget}(c,d)&: S_c' = \langle D_c \setminus \{d\} \rangle.
+\mathrm{introduce}(c,d)&: S_c' = \langle D_c \cup \{d\} \rangle, \\
+\mathrm{forget}(c,d)&: S_c' = \langle D_c \setminus \{d\} \rangle.
 \end{aligned}
 ```
 
@@ -72,7 +72,7 @@ effects such as a conversation already created.
 
 $S_c$ belongs to the native identity, not one running instance or a branch of
 its history. Reload and clean exit/same-ID resume load $S_c$ from
-$\operatorname{state}(c)$. Missing state starts with
+$\mathrm{state}(c)$. Missing state starts with
 $S_c = \langle \varnothing \rangle$; unreadable or corrupt state is a failure,
 not empty knowledge. Different identities have independent collections.
 
@@ -81,7 +81,7 @@ not empty knowledge. Different identities have independent collections.
 For an ordinary message $m$ from $c$ to $d$, write host submission as:
 
 ```math
-\operatorname{submit}(c,d,m) \rightsquigarrow o,
+\mathrm{submit}(c,d,m) \rightsquigarrow o,
 \qquad o \in \{\mathrm{accepted},\mathrm{unavailable},
               \mathrm{rejected},\mathrm{indeterminate}\}.
 ```
@@ -96,7 +96,7 @@ finished work, or processed it exactly once. Indeterminate delivery expresses
 uncertainty at the sender; it does not imply that $S_d$ stayed unchanged.
 No message is automatically replayed.
 
-An $\mathrm{unavailable}$ outcome invokes $\operatorname{forget}(c,d)$, subject
+An $\mathrm{unavailable}$ outcome invokes $\mathrm{forget}(c,d)$, subject
 to the persistence rule. The other outcomes cause no submission-induced change
 to $D_c$. Availability can change without changing identity, and knowing a peer
 does not keep it running.
