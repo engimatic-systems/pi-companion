@@ -52,13 +52,17 @@ test("human parsing rejects malformed open options with useful errors", async ()
   }
 });
 
-test("human command parsing exposes the same four conversation operations", async () => {
+test("human command parsing exposes the same conversation operations", async () => {
   assert.deepEqual(await parseCommand("open"), { action: "open" });
   assert.deepEqual(await parseCommand("open first message"), {
     action: "open",
     message: "first message",
   });
   assert.deepEqual(await parseCommand("list"), { action: "list" });
+  assert.deepEqual(await parseCommand(" introduce conversation-2 \n"), {
+    action: "introduce",
+    destination: "conversation-2",
+  });
   assert.deepEqual(await parseCommand("send conversation-2 ordinary message"), {
     action: "send",
     destination: "conversation-2",
@@ -78,4 +82,6 @@ test("human command parsing exposes the same four conversation operations", asyn
 test("incomplete human commands fail before Host effects", async () => {
   await assert.rejects(parseCommand("send conversation-2"), /message|usage/iu);
   await assert.rejects(parseCommand("forget conversation-2 extra"), /argument|unknown|usage/iu);
+  await assert.rejects(parseCommand("introduce"), /usage/iu);
+  await assert.rejects(parseCommand("introduce conversation-2 extra"), /usage/iu);
 });

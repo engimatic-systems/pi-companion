@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 
-import { errAsync, okAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import {
   Companion as PersistentCompanion,
@@ -48,6 +48,8 @@ class TestHostConnection implements HostConnection {
   creation: ResultAsync<ConversationReference, CreationFailure> = okAsync(created);
   submission: ResultAsync<SubmissionAcceptance, SubmissionFailure> = okAsync({ status: "accepted" });
   expectedSubmission?: { destination: ConversationReference; message: string };
+  introduction: ResultAsync<void, SubmissionFailure> = okAsync(undefined);
+  readonly introductions: ConversationReference[] = [];
   #introduce?: (reference: ConversationReference) => void;
 
   async start(onIntroduction: (reference: ConversationReference) => void): Promise<void> {
@@ -56,6 +58,11 @@ class TestHostConnection implements HostConnection {
 
   create(_configuration: ConversationConfiguration): ResultAsync<ConversationReference, CreationFailure> {
     return this.creation;
+  }
+
+  introduce(destination: ConversationReference): ResultAsync<void, SubmissionFailure> {
+    this.introductions.push(destination);
+    return this.introduction;
   }
 
   submit(
@@ -77,6 +84,50 @@ class TestHostConnection implements HostConnection {
     assert.ok(this.#introduce, "test Host must be started");
     this.#introduce(reference);
   }
+}
+
+test("explicit introduction persists after acknowledgement and re-exchanges on repetition", async () => {
+  const host = new TestHostConnection();
+  const companion = new Companion(owner);
+  const runtime = new Runtime(companion, host);
+  let accept!: () => void;
+  host.introduction = ResultAsync.fromSafePromise(new Promise<void>((resolve) => { accept = resolve; }));
+
+  const pending = runtime.introduce(peer);
+  assert.deepEqual(companion.destinations(), []);
+  accept();
+  assert.equal((await pending).isOk(), true);
+  assert.equal((await runtime.introduce(peer)).isOk(), true);
+  assert.deepEqual(companion.destinations(), [peer]);
+  assert.deepEqual(host.introductions, [peer, peer]);
+});
+
+test("explicit self-introduction does not exchange or retain self", async () => {
+  const host = new TestHostConnection();
+  const runtime = new Runtime(new Companion(owner), host);
+  assert.equal((await runtime.introduce(owner)).isOk(), true);
+  assert.deepEqual(runtime.destinations(), []);
+  assert.deepEqual(host.introductions, []);
+});
+
+for (const failure of [
+  { kind: "unavailable", message: "not listening" } as const,
+  { kind: "rejected", code: "save_failed", message: "not saved" } as const,
+  { kind: "indeterminate", message: "acknowledgement lost" } as const,
+]) {
+  test(`explicit ${failure.kind} introduction leaves known and unknown destinations unchanged`, async () => {
+    const host = new TestHostConnection();
+    host.introduction = errAsync(failure);
+    const companion = new Companion(owner);
+    companion.introduce(peer);
+    const runtime = new Runtime(companion, host);
+    for (const destination of [peer, thirdParty]) {
+      const result = await runtime.introduce(destination);
+      assert.equal(result.isErr() && result.error, failure);
+      assert.deepEqual(companion.destinations(), [peer]);
+    }
+    assert.deepEqual(host.introductions, [peer, thirdParty]);
+  });
 }
 
 test("Runtime introduces and returns a successfully created conversation", async () => {

@@ -36,6 +36,11 @@ const listActionSchema = Type.Object({
   action: Type.Literal("list"),
 }, { additionalProperties: false });
 
+const introduceActionSchema = Type.Object({
+  action: Type.Literal("introduce"),
+  destination: Type.String(),
+}, { additionalProperties: false });
+
 const sendActionSchema = Type.Object({
   action: Type.Literal("send"),
   destination: Type.String(),
@@ -51,6 +56,7 @@ const forgetActionSchema = Type.Object({
 export const actionSchema = Type.Union([
   openActionSchema,
   listActionSchema,
+  introduceActionSchema,
   sendActionSchema,
   forgetActionSchema,
 ]);
@@ -59,6 +65,7 @@ export type Action = Static<typeof actionSchema>;
 const actionNames = [
   openActionSchema.properties.action.const,
   listActionSchema.properties.action.const,
+  introduceActionSchema.properties.action.const,
   sendActionSchema.properties.action.const,
   forgetActionSchema.properties.action.const,
 ] as const;
@@ -68,7 +75,7 @@ const actionNames = [
 export const toolContract = {
   name: "companion",
   label: "Companion",
-  description: "Create a live conversation, list local destinations, submit an ordinary message, or forget locally.",
+  description: "Create a live conversation, introduce an existing conversation by destination, list local destinations, submit an ordinary message, or forget locally.",
   parameters: Type.Object({
     action: StringEnum(actionNames),
     destination: Type.Optional(Type.String()),
@@ -88,6 +95,7 @@ export function decodeAction(input: unknown): Action {
 export type Outcome =
   | { status: "opened"; reference: ConversationReference; submission?: SubmissionAcceptance["status"] }
   | { status: "listed"; reference: ConversationReference; destinations: readonly ConversationReference[] }
+  | { status: "introduced"; reference: ConversationReference; destination: ConversationReference }
   | { status: "accepted"; destination: ConversationReference }
   | { status: "forgotten"; destination: ConversationReference; removed: boolean }
   | {
@@ -145,6 +153,18 @@ export async function runAction(
         reference: runtime.reference,
         destinations: runtime.destinations(),
       };
+    case "introduce": {
+      const destination = conversationReference(action.destination);
+      const introduced = await runtime.introduce(destination);
+      if (introduced.isOk()) return { status: "introduced", reference: runtime.reference, destination };
+      return {
+        status: "error",
+        kind: introduced.error.kind,
+        message: `Introduction with ${destination} did not complete. Local destinations unchanged. ${introduced.error.message}${introduced.error.kind === "indeterminate"
+          ? " The peer may already know this conversation." : ""}`,
+        reference: destination,
+      };
+    }
     case "send": {
       const destination = conversationReference(action.destination);
       const submitted = await runtime.submit(destination, action.message);

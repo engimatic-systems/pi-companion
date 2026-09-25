@@ -1,4 +1,4 @@
-import { errAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 
 import { type Companion, type ConversationReference } from "./companion.js";
 import {
@@ -44,6 +44,28 @@ export class Runtime {
   /** Stops only the Host resources coordinated by this Runtime. */
   stop(): Promise<void> {
     return this.connection.stop();
+  }
+
+  /**
+   * Requests introduction at an existing peer, then persists it locally after
+   * acknowledgement. Repeats the exchange even for known destinations; self is
+   * a no-op. Exchange failures leave local knowledge unchanged, including on
+   * unavailability. Remote knowledge may change without local success; a local
+   * save failure throws with the acknowledged partial effect made explicit.
+   */
+  introduce(destination: ConversationReference): ResultAsync<void, SubmissionFailure> {
+    if (destination === this.reference) return okAsync(undefined);
+    return this.connection.introduce(destination).map(() => {
+      try {
+        this.companion.introduce(destination);
+      } catch (cause: unknown) {
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        throw new Error(
+          `Conversation ${destination} accepted introduction, but the local destination was not saved. ${detail}`,
+          { cause },
+        );
+      }
+    });
   }
 
   /** Introduces and returns a reference only after Host creation succeeds. */

@@ -29,6 +29,11 @@ actual package loading and owned isolated resources. See
   coordinates only connection lifecycle.
 - Successful creation introduces and returns the created reference.
 - Creation failure propagates without inserting the attempted reference.
+- Explicit introduction accepts an unknown peer, applies local introduction only
+  after remote acknowledgement, and re-exchanges even for a known peer. Self is
+  a no-op without an exchange.
+- Unavailable, rejected and indeterminate introductions leave local knowledge
+  unchanged; the submission forgetting policy does not apply.
 - Submission requires local destination knowledge and ordinary non-empty bounded
   text, then returns HostConnection acceptance or its typed failure.
 - Host-reported unavailability forgets only that destination.
@@ -37,8 +42,8 @@ actual package loading and owned isolated resources. See
 
 ## Human command language
 
-- Human command parsing exposes the same `open`, `list`, `send`, and `forget`
-  action shapes used by structured input.
+- Human command parsing exposes the same `open`, `introduce`, `list`, `send`, and
+  `forget` action shapes used by structured input.
 - Ordinary open text remains one literal message, including internal/trailing
   whitespace, newlines, quotes, backslashes, and embedded option-looking text.
 - A leading-hyphen open tail uses strict native `parseArgs` option grammar;
@@ -46,7 +51,7 @@ actual package loading and owned isolated resources. See
   and missing delimiters, unknown/duplicate/valueless options, invalid levels,
   and extra arguments fail.
 - Send retains its exact destination token and untouched literal message tail;
-  list and forget enforce their fixed arity without shell tokenization.
+  list, introduce and forget enforce their fixed arity without shell tokenization.
 
 ## Actions and launch selection
 
@@ -54,6 +59,8 @@ actual package loading and owned isolated resources. See
   structured fields that are illegal for the selected action. Pi still
   advertises the existing broader flattened tool parameter object.
 - Human and structured open actions resolve through the same execution path.
+- Introduce accepts only a destination, shares human/structured execution, and
+  requires neither launch selection nor an ordinary message.
 - Open without text invokes ordinary `Runtime.open` and does not submit. Open
   with text stops on creation failure; after successful creation it invokes
   ordinary `Runtime.submit`.
@@ -92,6 +99,13 @@ actual package loading and owned isolated resources. See
   cause, while preserving the bad file. Listener bind failure cleans its
   candidate and leaves stored knowledge unchanged.
 - Incoming introduction persists before attributed Pi delivery.
+- Two independent conversations acquire mutual persisted knowledge through
+  explicit introduction, without launch, Pi delivery or transcript entries.
+  Repetition needs no redundant save and repairs remotely forgotten knowledge;
+  subsequent ordinary exchange works in both directions.
+- Explicit remote save failure rejects with the remote path. Local save failure
+  after acknowledgement reports the remote-only effect and local path; repeating
+  after repair completes mutual introduction without duplicate destinations.
 - Persistence makes no fsync/crash-recovery, concurrent same-ID writer, locking,
   journal, repair, replay, supervision, or peer-relaunch guarantee.
 
@@ -109,6 +123,8 @@ actual package loading and owned isolated resources. See
 - Local setup resolves one `tmpdir()` socket root and derives connection paths.
 - Successful creation introduces the creator at the created Runtime before
   returning its reference.
+- Explicit introduction reuses the message-free exchange without launching and
+  without replay; an unacknowledged request may already have been applied remotely.
 - Incoming messages introduce unknown senders before local Pi delivery;
   references are not an access-control list.
 - One-pane launch splits the invoker right without taking focus.

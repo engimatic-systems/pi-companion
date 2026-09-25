@@ -91,24 +91,40 @@ HostConnection's outbound operations are:
 
 ```text
 HostConnection_c.create(configuration) → d
+HostConnection_c.introduce(d)
 HostConnection_c.submit(d, message)
 ```
 
 Configuration is a complete cwd/provider/model/thinking tuple, without an initial
 message or unresolved options. Actions resolve and validate selection before
 Runtime or Herdr effects, reading but not changing the invoking Pi selection.
-Expected creation/submission failures use NeverThrow `ResultAsync`.
+Expected creation/introduction/submission failures use NeverThrow `ResultAsync`.
 
-Creation chooses the ID, launches Pi and asks the new HostConnection to introduce
-the creator. The receiving Runtime persists that introduction before positive
-acknowledgement. Host creation failure does not add the attempted reference to
-the creator. Runtime's successful open path is:
+Creation chooses the ID, launches Pi and uses the same HostConnection introduction
+exchange to ask the new conversation to introduce the creator. The receiving
+Runtime persists that introduction before positive acknowledgement. Host creation
+failure does not add the attempted reference to the creator. Runtime's successful open path is:
 
 ```text
 d = connection.create(configuration)  # continue only on success
 companion.introduce(d)
 return d
 ```
+
+Explicit introduction reuses the existing version-1 `introduce` request without
+launching or delivering a Pi message. Runtime's path for a non-self destination is:
+
+```text
+connection.introduce(d)  # continue only on positive acknowledgement
+companion.introduce(d)
+```
+
+There is no known-destination precondition or short circuit: re-exchanging can
+repair knowledge forgotten remotely. Self-introduction returns without exchange
+or save. Transport failures preserve local knowledge, even on unavailability;
+this is not submission's forgetting policy. After acknowledgement, a local save
+exception preserves its storage path/cause and adds the acknowledged remote
+effect to the diagnostic. No atomicity, rollback or automatic retry is implied.
 
 Host supplies incoming introductions to Runtime, which routes them through
 Companion. An incoming message is delivered only after introduction succeeds.
