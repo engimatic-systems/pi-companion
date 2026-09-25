@@ -55,12 +55,19 @@ class OpenThenRejectConnection implements HostConnection {
   readonly reference = owner;
   readonly configurations: ConversationConfiguration[] = [];
   submissions = 0;
+  readonly introductions: ConversationReference[] = [];
+  introduction: ResultAsync<void, SubmissionFailure> = okAsync(undefined);
 
   async start(_onIntroduction: (reference: ConversationReference) => void): Promise<void> {}
 
   create(configuration: ConversationConfiguration): ResultAsync<ConversationReference, CreationFailure> {
     this.configurations.push(configuration);
     return okAsync(created);
+  }
+
+  introduce(destination: ConversationReference): ResultAsync<void, SubmissionFailure> {
+    this.introductions.push(destination);
+    return this.introduction;
   }
 
   submit(
@@ -82,6 +89,44 @@ test("structured decoding uses the canonical per-action field contract", () => {
     () => decodeAction({ action: "list", model: "not-for-list" }),
     /Invalid Companion action fields\./u,
   );
+});
+
+test("introduce accepts only a destination and shares human/structured execution without model selection", async () => {
+  for (const input of [
+    { action: "introduce" },
+    { action: "introduce", destination: created, message: "no task" },
+    ...["provider", "model", "thinking"].map((field) => ({
+      action: "introduce", destination: created, [field]: "high",
+    })),
+  ]) assert.throws(() => decodeAction(input), /Invalid Companion action fields/u);
+
+  for (const action of [
+    await parseCommand(`introduce ${created}`),
+    decodeAction({ action: "introduce", destination: created }),
+  ]) {
+    const connection = new OpenThenRejectConnection();
+    const runtime = new Runtime(new Companion(owner), connection);
+    const outcome = await runAction(runtime, action, {} as ExtensionContext);
+    assert.deepEqual(outcome, { status: "introduced", reference: owner, destination: created });
+    assert.deepEqual(runtime.destinations(), [created]);
+    assert.deepEqual(connection.introductions, [created]);
+    assert.deepEqual(connection.configurations, []);
+    assert.equal(connection.submissions, 0);
+  }
+});
+
+test("introduction failure reports unchanged local knowledge rather than send's forgetting policy", async () => {
+  const connection = new OpenThenRejectConnection();
+  connection.introduction = errAsync({ kind: "unavailable", message: "not listening" });
+  const runtime = new Runtime(new Companion(owner), connection);
+  const outcome = await runAction(runtime, {
+    action: "introduce", destination: created,
+  }, {} as ExtensionContext);
+  assert.equal(outcome.status, "error");
+  if (outcome.status !== "error") assert.fail("expected error");
+  assert.equal(outcome.kind, "unavailable");
+  assert.match(outcome.message, /[Ll]ocal destinations unchanged/u);
+  assert.equal(outcome.destinationForgotten, undefined);
 });
 
 test("human and structured provider-only selection resolve the same configuration", async () => {

@@ -3,6 +3,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { conversationReference } from "../src/companion.js";
 import {
@@ -13,6 +14,8 @@ import {
   type HostConnection,
   type PiExec,
 } from "../src/host.js";
+
+import { listen } from "../src/socket-transport.js";
 
 const a = conversationReference("10000000-0000-4000-8000-000000000001");
 const b = conversationReference("10000000-0000-4000-8000-000000000002");
@@ -250,6 +253,51 @@ test("incoming message introduces an unknown sender before local delivery", asyn
   } finally {
     await sender.stop();
     await receiver.stop();
+  }
+});
+
+test("explicit Host introduction reuses the message-free wire exchange without launching", async () => {
+  const notices: string[] = [];
+  const connection = (reference: typeof a) => createHostConnection({
+    reference, extensionPath,
+    exec: async () => { throw new Error("must not launch"); },
+    deliver: () => { assert.fail("introduction must not deliver a message"); },
+  });
+  const sender = connection(a);
+  const receiver = connection(b);
+  await sender.start(() => {});
+  await receiver.start((source) => { notices.push(source); });
+  try {
+    assert.equal((await sender.introduce(b)).isOk(), true);
+    assert.equal((await sender.introduce(b)).isOk(), true);
+    assert.deepEqual(notices, [a, a]);
+  } finally {
+    await sender.stop();
+    await receiver.stop();
+  }
+});
+
+test("unacknowledged introduction can already be applied remotely and is not replayed", async () => {
+  const notices: string[] = [];
+  const receiver = await listen(conversationSocketPath(b, tmpdir()), async (request) => {
+    assert.equal(request.operation, "introduce");
+    notices.push(request.source);
+    await delay(100);
+    return { accepted: "introduce" };
+  });
+  const sender = createHostConnection({
+    reference: a, extensionPath, exchangeTimeoutMs: 25,
+    exec: async () => { throw new Error("must not launch"); },
+    deliver: () => {},
+  });
+  try {
+    const result = await sender.introduce(b);
+    assert.equal(result.isErr() && result.error.kind, "indeterminate");
+    await delay(120);
+    assert.deepEqual(notices, [a]);
+  } finally {
+    await sender.stop();
+    await receiver.close();
   }
 });
 

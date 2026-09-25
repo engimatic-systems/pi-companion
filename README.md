@@ -1,7 +1,7 @@
 # Companion
 
-Companion creates independently accessible Pi conversations for bounded work,
-without merging their histories. Each conversation can create peers, remember
+Companion creates and connects independently accessible Pi conversations for
+bounded work, without merging their histories. Each conversation can create peers, remember
 their references, and exchange ordinary messages. The operator can interact
 with every conversation directly.
 
@@ -38,13 +38,14 @@ automatically loaded in them.
 /companion open
 /companion open Review this interface and report what matters.
 /companion list
+/companion introduce <conversation-id>
 /companion send <conversation-id> Consider the failure path too.
 /companion forget <conversation-id>
 ```
 
-The agent has the same `open`, `list`, `send`, and `forget` actions through the
-`companion` tool. Destinations are selected by their exact native Pi session IDs,
-not local names.
+The agent has the same `open`, `introduce`, `list`, `send`, and `forget` actions
+through the `companion` tool. Destinations are selected by their exact native Pi
+session IDs, not local names.
 
 Opening a conversation introduces both peers. Every incoming message introduces
 its sender before delivery to local Pi. Introductions are idempotent. Forgetting
@@ -57,6 +58,34 @@ path. No transcript history is implicitly copied. Messages appear with sender
 attribution and use Pi steering with turn triggering, including during active
 work. Acceptance means submission was accepted, not that the agent read it,
 completed a turn, or processed it exactly once.
+
+### Introduce an existing conversation
+
+In the other running Pi conversation, obtain its native ID with `/session` or
+`/companion list`. It must have Companion loaded and use the same socket root.
+Then invoke `/companion introduce <conversation-id>`, or use the tool:
+
+```json
+{"action":"introduce","destination":"<conversation-id>"}
+```
+
+No prior local knowledge is required. Success means the peer acknowledged saving
+this conversation as a destination and this conversation saved the peer locally.
+It does not launch a conversation, send a message, copy history, or trigger an
+agent turn. You can then use ordinary `send` in either direction.
+
+Repeating introduction contacts the peer again, even when already known locally,
+so it can restore knowledge the peer forgot. Existing references are not duplicated
+or rewritten. Self-introduction is a no-op. Only a destination is accepted; message
+and launch-selection fields are invalid for this action.
+
+Introduction is not atomic: an indeterminate exchange may already have introduced
+this conversation remotely. A local save failure after remote acknowledgement
+reports that partial effect and the storage path. Exchange failures leave local
+knowledge unchanged, **including unavailability** (unlike `send`). No automatic
+retry or rollback occurs. Once a failure is understood, explicit repetition can
+complete a partial introduction. Success does not guarantee continued availability,
+agent awareness, processing, or authorization.
 
 ### Launch selection and literal text
 

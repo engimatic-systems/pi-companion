@@ -65,6 +65,20 @@ D_c' = D_c \cup \{d_i\},
 \qquad D_d' = \{c_i\}.
 ```
 
+Explicit introduction to an existing conversation $d$ requires no prior local
+knowledge. It requests $\mathrm{introduce}(d,c_i)$, waits for the peer's positive
+acknowledgement, then applies $\mathrm{introduce}(c,d_i)$. Successful completion
+has added each reference to the other's collection; it creates no conversation
+and submits no ordinary message. This is a sequence, not an atomic transaction.
+
+Repetition still requests remote introduction: local knowledge cannot establish
+what the peer currently knows. Each model change remains idempotent, and explicit
+self-introduction is a no-op without an exchange. A failed exchange leaves $D_c$
+unchanged, including on unavailability; after connection, $D_d$ may already have
+changed. Local persistence failure after acknowledgement leaves only the local
+change unapplied and reports the acknowledged remote effect. Neither case rolls
+back or retries automatically.
+
 Receiving a message from $c$ at $d$ invokes $\mathrm{introduce}(d,c_i)$ before
 local delivery. The sender's identifier need not already belong to $D_d$.
 Thus a message from a forgotten peer can introduce it again.
@@ -124,8 +138,9 @@ does not keep it running.
 
 ## Assumptions and limits
 
-One active instance per ID is assumed, not enforced exclusivity. Creation and
-mutual introduction are not an atomic transaction: failure can leave a created
-conversation running. There is no external-effect rollback, automatic relaunch,
-strong crash-durability guarantee, or resumption of interrupted work. Independent
+One active instance per ID is assumed, not enforced exclusivity. Neither creation
+nor explicit mutual introduction is an atomic transaction: failure can leave a
+created conversation running or destination knowledge changed on only one side.
+There is no external-effect rollback, automatic relaunch, strong crash-durability
+guarantee, or resumption of interrupted work. Independent
 conversation histories are not a filesystem or same-user security sandbox.

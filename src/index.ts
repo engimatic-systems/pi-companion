@@ -119,6 +119,10 @@ function render(outcome: Outcome): string {
       return outcome.destinations.length === 0
         ? `Conversation ${outcome.reference} has no local destinations.`
         : `Conversation ${outcome.reference} destinations:\n${outcome.destinations.join("\n")}`;
+    case "introduced":
+      return outcome.destination === outcome.reference
+        ? "Self-introduction changes no destinations; no message submitted."
+        : `Conversations ${outcome.reference} and ${outcome.destination} introduced; no message submitted.`;
     case "accepted":
       return `Host accepted the message submission to ${outcome.destination}.`;
     case "forgotten":

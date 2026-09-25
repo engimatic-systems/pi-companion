@@ -44,11 +44,17 @@ export interface SubmissionAcceptance {
   status: "accepted";
 }
 
-/** Conversation-local access to creation, submission, and incoming Host events. */
+/** Conversation-local access to creation, introduction, submission, and incoming Host events. */
 export interface HostConnection {
   start(onIntroduction: (source: ConversationReference) => void): Promise<void>;
   stop(): Promise<void>;
   create(configuration: ConversationConfiguration): ResultAsync<ConversationReference, CreationFailure>;
+  /**
+   * Requests remote introduction of this connection's reference once, without
+   * launch, message delivery or local state changes. Missing acknowledgement
+   * after connection cannot establish that the peer's state is unchanged.
+   */
+  introduce(destination: ConversationReference): ResultAsync<void, SubmissionFailure>;
   submit(
     destination: ConversationReference,
     message: string,
@@ -127,7 +133,17 @@ export function createHostConnection({
     return { accepted: "message" };
   };
 
+  const introduce = (destination: ConversationReference): ResultAsync<void, SubmissionFailure> =>
+    exchange(conversationSocketPath(destination, socketRoot), {
+      version: 1,
+      operation: "introduce",
+      source: reference,
+      destination,
+    }, exchangeTimeoutMs).map(() => undefined);
+
   return {
+    introduce,
+
     async start(introductionHandler): Promise<void> {
       if (listener) return;
       listener = await listen(socketPath, receive);
@@ -164,16 +180,7 @@ export function createHostConnection({
           message: `Conversation creation failed; a process may remain and no rollback was attempted: ${message(cause)}`,
           cause,
         }),
-      ).andThen(() => exchange(
-        conversationSocketPath(attemptedReference, socketRoot),
-        {
-          version: 1,
-          operation: "introduce",
-          source: reference,
-          destination: attemptedReference,
-        },
-        exchangeTimeoutMs,
-      ).map(() => attemptedReference).mapErr((cause): CreationFailure => ({
+      ).andThen(() => introduce(attemptedReference).map(() => attemptedReference).mapErr((cause): CreationFailure => ({
         kind: "creation_failed",
         attemptedReference,
         message: `Conversation ${attemptedReference} launched but did not accept its creator introduction; a process may remain and no rollback was attempted: ${cause.message}`,

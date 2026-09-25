@@ -170,10 +170,11 @@ test("Pi registration preserves metadata and inactive-input error precedence", a
   assert.ok(tool);
 
   assert.equal(command.description,
-    "Create, list, message, or locally forget Companion conversations.");
+    "Create, introduce, list, message, or locally forget Companion conversations.");
   assert.equal(tool.label, "Companion");
   assert.equal(tool.description,
-    "Create a live conversation, list local destinations, submit an ordinary message, or forget locally.");
+    "Create a live conversation, introduce an existing conversation by destination, list local destinations, submit an ordinary message, or forget locally.");
+  assert.equal(Check(tool.parameters, { action: "introduce", destination: created }), true);
   assert.equal(Check(tool.parameters, { action: "list", model: "advertised-but-illegal" }), true);
 
   await harness.command("not-a-command");
@@ -195,6 +196,98 @@ test("Pi registration preserves metadata and inactive-input error precedence", a
     status: "error",
     message: "Companion Runtime is not active for this conversation.",
   });
+});
+
+test("explicit introductions connect independent conversations without launch or Pi delivery", async () => {
+  const left = new PiLifecycleHarness(owner, new TestSessionState());
+  const right = new PiLifecycleHarness(created, new TestSessionState());
+  await left.start("startup");
+  await right.start("startup");
+  const known = (h: PiLifecycleHarness) => new PersistentCompanion(h.reference, h.agentDir).destinations();
+  mkdirSync(join(left.agentDir, "companion"), { recursive: true });
+  mkdirSync(join(right.agentDir, "companion"), { recursive: true });
+  try {
+    await left.command(`introduce ${created}`);
+    assert.deepEqual(left.notifications.at(-1), {
+      message: `Conversations ${owner} and ${created} introduced; no message submitted.`, type: "info",
+    });
+    assert.deepEqual(known(left), [created]);
+    assert.deepEqual(known(right), [owner]);
+    // Repetition needs no state write, but must repair knowledge forgotten remotely.
+    chmodSync(join(left.agentDir, "companion"), 0o500);
+    chmodSync(join(right.agentDir, "companion"), 0o500);
+    await left.command(`introduce ${created}`);
+    assert.equal(left.notifications.at(-1)?.type, "info");
+    chmodSync(join(left.agentDir, "companion"), 0o700);
+    chmodSync(join(right.agentDir, "companion"), 0o700);
+    await right.command(`forget ${owner}`);
+    const repeated = await left.tool({ action: "introduce", destination: created }) as { details: unknown };
+    assert.deepEqual(repeated.details, { status: "introduced", reference: owner, destination: created });
+    assert.deepEqual(known(right), [owner]);
+    await left.command(`introduce ${owner}`);
+    assert.match(left.notifications.at(-1)?.message ?? "", /Self-introduction changes no destinations/u);
+    await left.command("introduce ../unsafe");
+    assert.equal(left.notifications.at(-1)?.type, "error");
+    assert.deepEqual(left.deliveries, []);
+    assert.deepEqual(right.deliveries, []);
+    assert.deepEqual(left.execCalls, []);
+    assert.deepEqual(right.execCalls, []);
+    await left.command(`send ${created} hello`);
+    await right.command(`send ${owner} reply`);
+    assert.equal(left.deliveries.length, 1);
+    assert.equal(right.deliveries.length, 1);
+    await right.shutdown("quit");
+    await left.command(`introduce ${created}`);
+    assert.match(left.notifications.at(-1)?.message ?? "", /unavailable.*[Ll]ocal destinations unchanged/u);
+    assert.deepEqual(known(left), [created]);
+    await left.command(`send ${created} unavailable`);
+    assert.deepEqual(known(left), []);
+  } finally {
+    for (const harness of [left, right]) {
+      chmodSync(join(harness.agentDir, "companion"), 0o700);
+      await harness.shutdown("quit");
+    }
+  }
+});
+
+test("explicit introduction distinguishes remote rejection from acknowledged remote-only persistence", async () => {
+  const left = new PiLifecycleHarness(owner, new TestSessionState());
+  const right = new PiLifecycleHarness(created, new TestSessionState());
+  await left.start("startup");
+  await right.start("startup");
+  const leftDirectory = join(left.agentDir, "companion");
+  const rightDirectory = join(right.agentDir, "companion");
+  mkdirSync(leftDirectory, { recursive: true });
+  mkdirSync(rightDirectory, { recursive: true });
+  const known = (h: PiLifecycleHarness) => new PersistentCompanion(h.reference, h.agentDir).destinations();
+  try {
+    chmodSync(rightDirectory, 0o500);
+    await left.command(`introduce ${created}`);
+    assert.match(left.notifications.at(-1)?.message ?? "", /rejected/u);
+    assert.ok(left.notifications.at(-1)?.message.includes(join(rightDirectory, `${created}.json`)));
+    assert.deepEqual(known(left), []);
+    assert.deepEqual(known(right), []);
+    chmodSync(rightDirectory, 0o700);
+    chmodSync(leftDirectory, 0o500);
+    await left.command(`introduce ${created}`);
+    assert.equal(left.notifications.at(-1)?.type, "error");
+    assert.match(left.notifications.at(-1)?.message ?? "", /accepted introduction.*local destination was not saved/u);
+    assert.ok(left.notifications.at(-1)?.message.includes(join(leftDirectory, `${owner}.json`)));
+    assert.deepEqual(known(left), []);
+    assert.deepEqual(known(right), [owner]);
+    chmodSync(leftDirectory, 0o700);
+    await left.command(`introduce ${created}`);
+    assert.equal(left.notifications.at(-1)?.type, "info");
+    assert.deepEqual(known(left), [created]);
+    assert.deepEqual(known(right), [owner]);
+    assert.deepEqual(left.deliveries, []);
+    assert.deepEqual(right.deliveries, []);
+  } finally {
+    chmodSync(leftDirectory, 0o700);
+    chmodSync(rightDirectory, 0o700);
+    await left.shutdown("quit");
+    await right.shutdown("quit");
+  }
 });
 
 test("clean same-ID resume loads destinations from ordinary Companion state", async () => {

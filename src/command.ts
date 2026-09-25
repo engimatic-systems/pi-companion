@@ -4,8 +4,8 @@ import { THINKING_LEVELS, type Action } from "./actions.js";
 
 export const humanCommand = {
   name: "companion",
-  description: "Create, list, message, or locally forget Companion conversations.",
-  usage: "Usage: /companion open [message] | open [--provider PROVIDER] [--model MODEL] [--thinking LEVEL] [-- MESSAGE] | list | send <conversation-id> <message> | forget <conversation-id>",
+  description: "Create, introduce, list, message, or locally forget Companion conversations.",
+  usage: "Usage: /companion open [message] | open [--provider PROVIDER] [--model MODEL] [--thinking LEVEL] [-- MESSAGE] | introduce <conversation-id> | list | send <conversation-id> <message> | forget <conversation-id>",
 } as const;
 
 interface FramedCommand {
@@ -52,9 +52,9 @@ const openOptions = {
  * `"open"` and `"open --"` both construct an open action with no message.
  * Incomplete or malformed input rejects instead of constructing a partial
  * action. Fixed dispatch rejects unknown commands and a `list` tail; the
- * command parsers enforce `send` and `forget` arity. Option-mode message text
- * requires standalone `--`, and `send` requires both a destination and a
- * non-empty literal message tail.
+ * command parsers enforce `send`, `introduce`, and `forget` arity. Option-mode
+ * message text requires standalone `--`, and `send` requires both a destination
+ * and a non-empty literal message tail.
  */
 export async function parseCommand(raw: string): Promise<Action> {
   const command = frameCommand(raw);
@@ -66,8 +66,9 @@ export async function parseCommand(raw: string): Promise<Action> {
       return { action: "list" };
     case "send":
       return parseSend(command.tail);
+    case "introduce":
     case "forget":
-      return parseForget(command.tail);
+      return { action: command.name, destination: parseDestination(command.tail) };
     default:
       throw new Error(humanCommand.usage);
   }
@@ -176,11 +177,11 @@ function parseSend(tail: string | undefined): Action {
   };
 }
 
-/** Accepts exactly one destination token; `forget` and `list` have no literal payload. */
-function parseForget(tail: string | undefined): Action {
+/** Accepts exactly one destination token without a literal payload. */
+function parseDestination(tail: string | undefined): string {
   const destination = tail?.trimEnd();
   if (!destination || /\s/u.test(destination)) throw new Error(humanCommand.usage);
-  return { action: "forget", destination };
+  return destination;
 }
 
 function isThinkingLevel(
