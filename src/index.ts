@@ -15,7 +15,7 @@ import {
   conversationReference,
   type ConversationReference,
 } from "./companion.js";
-import { humanCommand, parseCommand } from "./command.js";
+import { humanCommand, isHelpRequest, parseCommand } from "./command.js";
 import { createHostConnection } from "./host.js";
 import { Runtime } from "./runtime.js";
 
@@ -63,6 +63,10 @@ export default function companion(pi: ExtensionAPI, agentDir = getAgentDir()): v
     description: humanCommand.description,
     handler: async (raw, ctx) => {
       try {
+        if (isHelpRequest(raw)) {
+          ctx.ui.notify(humanCommand.help, "info");
+          return;
+        }
         const runtime = requireActive(active);
         const action = await parseCommand(raw);
         const outcome = await runAction(runtime, action, ctx);

@@ -35,12 +35,18 @@ automatically loaded in them.
 ## Use
 
 ```text
+/companion
+/companion help
 /companion open
 /companion open Review this interface and report what matters.
 /companion list
 /companion send <conversation-id> Consider the failure path too.
 /companion forget <conversation-id>
 ```
+
+Bare `/companion` (including whitespace-only input) and `/companion help` show
+informational command help, even when the conversation's Runtime is inactive.
+They do not create, message, introduce, or forget a conversation.
 
 The agent has `open`, `list`, `send`, `introduce`, and `forget` actions through the
 `companion` tool. For example, `{action:"introduce", destination:"<native-session-id>"}`
