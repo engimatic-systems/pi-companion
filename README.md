@@ -40,6 +40,7 @@ automatically loaded in them.
 /companion open
 /companion open Review this interface and report what matters.
 /companion list
+/companion introduce <conversation-id>
 /companion send <conversation-id> Consider the failure path too.
 /companion forget <conversation-id>
 ```
@@ -49,15 +50,15 @@ informational command help, even when the conversation's Runtime is inactive.
 They do not create, message, introduce, or forget a conversation.
 
 The agent has `open`, `list`, `send`, `introduce`, and `forget` actions through the
-`companion` tool. For example, `{action:"introduce", destination:"<native-session-id>"}`
-adds that reference locally without contacting the other conversation. There is
-no human `introduce` command. Destinations are selected by their exact native Pi
-session IDs, not local names.
+`companion` tool. `/companion introduce <conversation-id>` and the structured
+`{action:"introduce", destination:"<native-session-id>"}` both add a reference
+locally without contacting the other conversation. Destinations are selected by
+their exact native Pi session IDs, not local names.
 
 Opening a conversation introduces both peers. Ordinary send accepts an unknown
 reference: it saves the sender's local introduction before submitting, then the
 incoming message introduces its sender at the receiver before delivery to local
-Pi. Explicit tool introduction alone never introduces the sender at the receiver.
+Pi. Explicit local introduction alone never introduces the sender at the receiver.
 Introductions are idempotent and self-introduction does nothing. Forgetting
 is local: it does not stop the other conversation, delete its history, or prevent
 a later message from introducing it again. Destination knowledge is not an
