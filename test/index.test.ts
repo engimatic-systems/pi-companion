@@ -173,7 +173,7 @@ test("Pi registration preserves metadata and inactive-input error precedence", a
     "Create, list, message, or locally forget Companion conversations.");
   assert.equal(tool.label, "Companion");
   assert.equal(tool.description,
-    "Create a live conversation, list local destinations, submit an ordinary message, or forget locally.");
+    "Create a live conversation, list or introduce local destinations, submit an ordinary message, or forget locally.");
   assert.equal(Check(tool.parameters, { action: "list", model: "advertised-but-illegal" }), true);
 
   await harness.command("not-a-command");
@@ -195,6 +195,103 @@ test("Pi registration preserves metadata and inactive-input error precedence", a
     status: "error",
     message: "Companion Runtime is not active for this conversation.",
   });
+});
+
+test("structured introduction is local; ordinary send creates reciprocal knowledge only on receipt", async () => {
+  const sender = conversationReference("30600000-0000-4000-8000-000000000001");
+  const receiver = conversationReference("30600000-0000-4000-8000-000000000002");
+  const senderDir = isolatedAgentDir();
+  const receiverDir = isolatedAgentDir();
+  const a = new PiLifecycleHarness(sender, new TestSessionState(), senderDir);
+  const b = new PiLifecycleHarness(receiver, new TestSessionState(), receiverDir);
+  await a.start("startup");
+  await b.start("startup");
+  try {
+    const tool = a.tools.get("companion");
+    assert.ok(tool);
+    assert.equal(Check(tool.parameters, { action: "introduce", destination: receiver }), true);
+    const invalid = await a.tool({ action: "introduce", destination: receiver, message: "no" }) as {
+      details: unknown;
+    };
+    assert.deepEqual(invalid.details, { status: "error", message: "Invalid Companion action fields." });
+    const self = await a.tool({ action: "introduce", destination: sender }) as {
+      details: unknown; content: Array<{ text: string }>;
+    };
+    assert.deepEqual(self.details, { status: "introduced", destination: sender });
+    assert.match(self.content[0]?.text ?? "", /self are no-ops/u);
+    assert.deepEqual(new PersistentCompanion(sender, senderDir).destinations(), []);
+    const introduced = await a.tool({ action: "introduce", destination: receiver }) as {
+      details: unknown; content: Array<{ text: string }>;
+    };
+    assert.deepEqual(introduced.details, { status: "introduced", destination: receiver });
+    assert.equal(introduced.content[0]?.text,
+      `Local introduction for ${receiver} complete (repeat and self are no-ops); no peer was contacted.`);
+    assert.equal(readFileSync(join(senderDir, "companion", `${sender}.json`), "utf8"),
+      `["${receiver}"]\n`);
+    assert.deepEqual(b.deliveries, []);
+    await b.command("list");
+    assert.equal(b.notifications.at(-1)?.message, `Conversation ${receiver} has no local destinations.`);
+    assert.deepEqual(a.execCalls, []);
+    assert.deepEqual(b.execCalls, []);
+
+    const sent = await a.tool({ action: "send", destination: receiver, message: "hello" }) as {
+      details: unknown; content: Array<{ text: string }>;
+    };
+    assert.deepEqual(sent.details, { status: "accepted", destination: receiver });
+    assert.equal(sent.content[0]?.text, `Host accepted the message submission to ${receiver}.`);
+    assert.deepEqual(b.deliveries, [{
+      message: {
+        customType: "companion-message",
+        content: `Message from conversation ${sender}:\n\nhello`,
+        display: true,
+        details: { source: sender },
+      },
+      options: { deliverAs: "steer", triggerTurn: true },
+    }]);
+    assert.equal(readFileSync(join(receiverDir, "companion", `${receiver}.json`), "utf8"),
+      `["${sender}"]\n`);
+    await b.command(`send ${sender} reply`);
+    assert.deepEqual(b.notifications.at(-1), {
+      message: `Host accepted the message submission to ${sender}.`, type: "info",
+    });
+    assert.equal(a.deliveries.length, 1);
+    assert.equal(readFileSync(join(senderDir, "companion", `${sender}.json`), "utf8"),
+      `["${receiver}"]\n`);
+  } finally {
+    await a.shutdown("quit");
+    await b.shutdown("quit");
+  }
+});
+
+test("structured send to an unknown reference persists first; invalid and self sends are effect-free", async () => {
+  const sender = conversationReference("30700000-0000-4000-8000-000000000001");
+  const receiver = conversationReference("30700000-0000-4000-8000-000000000002");
+  const agentDir = isolatedAgentDir();
+  const a = new PiLifecycleHarness(sender, new TestSessionState(), agentDir);
+  const b = new PiLifecycleHarness(receiver, new TestSessionState());
+  await a.start("startup");
+  await b.start("startup");
+  try {
+    for (const input of [
+      { action: "send", destination: "bad/ref", message: "hello" },
+      { action: "send", destination: receiver, message: "" },
+      { action: "send", destination: sender, message: "hello" },
+    ]) {
+      const result = await a.tool(input) as { details: { status: string } };
+      assert.equal(result.details.status, "error");
+    }
+    assert.deepEqual(new PersistentCompanion(sender, agentDir).destinations(), []);
+    assert.deepEqual(b.deliveries, []);
+    const result = await a.tool({ action: "send", destination: receiver, message: "first" }) as {
+      details: unknown;
+    };
+    assert.deepEqual(result.details, { status: "accepted", destination: receiver });
+    assert.deepEqual(new PersistentCompanion(sender, agentDir).destinations(), [receiver]);
+    assert.equal(b.deliveries.length, 1);
+  } finally {
+    await a.shutdown("quit");
+    await b.shutdown("quit");
+  }
 });
 
 test("clean same-ID resume loads destinations from ordinary Companion state", async () => {

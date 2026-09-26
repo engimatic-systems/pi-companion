@@ -29,11 +29,15 @@ actual package loading and owned isolated resources. See
   coordinates only connection lifecycle.
 - Successful creation introduces and returns the created reference.
 - Creation failure propagates without inserting the attempted reference.
-- Submission requires local destination knowledge and ordinary non-empty bounded
-  text, then returns HostConnection acceptance or its typed failure.
-- Host-reported unavailability forgets only that destination.
-- Rejected or indeterminate submission retains the destination and is not
-  replayed.
+- Explicit introduction changes only local state, persists before success, and
+  does not contact Host; repetition and self-introduction are no-ops.
+- Submission validates ordinary non-empty bounded text and excludes self-send
+  before effects. An unknown reference is introduced and saved locally before
+  one Host submission; failed persistence blocks submission.
+- Host-reported unavailability forgets only that destination, including one
+  first introduced by this send.
+- Rejected or indeterminate submission retains the destination, including one
+  first introduced by this send, and is not replayed.
 
 ## Human command language
 
@@ -51,7 +55,9 @@ actual package loading and owned isolated resources. See
 ## Actions and launch selection
 
 - One canonical per-action schema derives the TypeScript action type and rejects
-  structured fields that are illegal for the selected action. Pi still
+  structured fields that are illegal for the selected action. `introduce` requires
+  a valid reference, with no message or launch selection; `send` validates its
+  supplied reference and no longer requires existing local knowledge. Pi still
   advertises the existing broader flattened tool parameter object.
 - Human and structured open actions resolve through the same execution path.
 - Open without text invokes ordinary `Runtime.open` and does not submit. Open
@@ -72,6 +78,7 @@ actual package loading and owned isolated resources. See
 
 - Registration exposes exactly the `companion` human command and structured
   tool, with the advertised schema and notification/tool-response rendering.
+  The tool accepts and renders local `introduce`; the human parser is unchanged.
 - Human handling checks for an active Runtime before parsing. Structured handling
   validates the canonical action before reporting an inactive Runtime.
 - Human parsing and structured decoding both invoke the same action execution;
@@ -91,7 +98,10 @@ actual package loading and owned isolated resources. See
 - Corrupt state prevents Runtime/listener activation with its exact path and
   cause, while preserving the bad file. Listener bind failure cleans its
   candidate and leaves stored knowledge unchanged.
-- Incoming introduction persists before attributed Pi delivery.
+- Incoming introduction persists before attributed Pi delivery. Isolated
+  two-conversation composition shows explicit introduction changes only the
+  sender's state; reciprocal knowledge arises on ordinary receipt, and a reply
+  can follow without another introduction exchange.
 - Persistence makes no fsync/crash-recovery, concurrent same-ID writer, locking,
   journal, repair, replay, supervision, or peer-relaunch guarantee.
 

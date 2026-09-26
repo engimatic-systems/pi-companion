@@ -121,6 +121,8 @@ function render(outcome: Outcome): string {
         : `Conversation ${outcome.reference} destinations:\n${outcome.destinations.join("\n")}`;
     case "accepted":
       return `Host accepted the message submission to ${outcome.destination}.`;
+    case "introduced":
+      return `Local introduction for ${outcome.destination} complete (repeat and self are no-ops); no peer was contacted.`;
     case "forgotten":
       return outcome.removed
         ? `Forgot ${outcome.destination} locally; the other conversation was not stopped.`
