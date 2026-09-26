@@ -138,11 +138,12 @@ block Pi.
 - Peers may forget a conversation they find unavailable during downtime. Stored
   knowledge does not keep peers running, resume interrupted work, or reclaim
   stale sockets.
-- All participants must resolve the same `tmpdir()` socket root. A custom
-  `TMPDIR` is not forwarded through Herdr launch; different parent/child roots
-  are unsupported and can cause failure after launch.
-- There is no process supervision, event bridge, local naming, persistent
-  extension settings, or isolation from hostile code running as the same user.
+- Participants must resolve the same `tmpdir()` socket root and socket address
+  convention. Socket paths use `<tmpdir>/pi-cmp-<uid>/<full-native-id>.sock` with
+  a 103-byte UTF-8 pathname guard for Linux/macOS (excluding the trailing NUL);
+  longer roots can still fail explicitly. A custom `TMPDIR` is not forwarded
+  through Herdr launch; different parent/child roots are unsupported and can
+  cause failure after launch.
 
 ## Disable
 
