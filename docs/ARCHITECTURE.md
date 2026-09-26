@@ -53,11 +53,13 @@ address from it. Session state is keyed by the same ID rather than independently
 supplied addressing or transcript information.
 
 Each connection resolves `socketRoot = tmpdir()` once. Addresses take the form
-`<socketRoot>/pi-companion-<uid>/<id>.sock`, with a checked platform path limit.
-The listener directory is private to the user. There is no socket-root setting
-or propagation channel. Participants must resolve the same root; this realizes
-the model's addressing assumption without establishing availability or enforced
-exclusivity of an ID.
+`<socketRoot>/pi-cmp-<uid>/<full-native-id>.sock`. The common Linux/macOS guard
+rejects paths over 103 UTF-8 pathname bytes (excluding the trailing NUL) before
+binding or connecting; roots that are still too long fail explicitly. The listener
+directory is private to the user. There is no socket-root setting or propagation
+channel. Participants must resolve the same root and address convention; this
+realizes the model's addressing assumption without establishing availability or
+enforced exclusivity of an ID.
 
 ## Persistent collection
 

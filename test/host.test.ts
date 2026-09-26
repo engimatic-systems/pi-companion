@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { conversationReference } from "../src/companion.js";
@@ -74,10 +74,45 @@ test("conversation socket path derives from the resolved socket root", async () 
   const root = await temporaryRoot();
   try {
     const uid = typeof process.getuid === "function" ? process.getuid() : "user";
-    assert.equal(conversationSocketPath(b, root), join(root, `pi-companion-${uid}`, `${b}.sock`));
+    assert.equal(conversationSocketPath(b, root), join(root, `pi-cmp-${uid}`, `${b}.sock`));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("reported macOS temporary root fits a full native ID with its reported UID", () => {
+  const root = "/var/folders/kg/pmjxhgy506n699dj2g96f2wh0000gn/T";
+  // The report used a three-digit UID; the executing test host may use more digits.
+  assert.equal(Buffer.byteLength(join(root, "pi-companion-501", `${b}.sock`)), 107);
+  assert.equal(Buffer.byteLength(join(root, "pi-cmp-501", `${b}.sock`)), 101);
+  const uid = typeof process.getuid === "function" ? process.getuid() : "user";
+  const oldAddress = join(root, `pi-companion-${uid}`, `${b}.sock`);
+  const expected = join(root, `pi-cmp-${uid}`, `${b}.sock`);
+  assert.equal(Buffer.byteLength(oldAddress) - Buffer.byteLength(expected), 6);
+  if (Buffer.byteLength(expected) <= 103) {
+    assert.equal(conversationSocketPath(b, root), expected);
+    assert.equal(expected.endsWith(`${b}.sock`), true);
+  } else {
+    assert.throws(() => conversationSocketPath(b, root), /No Companion socket address fits/u);
+  }
+});
+
+test("socket address guard admits 103 UTF-8 bytes and rejects 104", () => {
+  const uid = typeof process.getuid === "function" ? process.getuid() : "user";
+  const base = join("/tmp", `pi-cmp-${uid}`, `${b}.sock`);
+  const root = `/tmp/${"x".repeat(103 - Buffer.byteLength(base) - 1)}`;
+  const atLimit = conversationSocketPath(b, root);
+  assert.equal(Buffer.byteLength(atLimit), 103);
+  assert.equal(atLimit.endsWith(`${b}.sock`), true);
+  assert.throws(() => conversationSocketPath(b, `${root}x`), /No Companion socket address fits/u);
+
+  // Fewer characters can still exceed the byte limit.
+  const multibyteAtLimit = conversationSocketPath(b, `${root.slice(0, -2)}é`);
+  assert.equal(Buffer.byteLength(multibyteAtLimit), 103);
+  const tooLong = `${root.slice(0, -1)}é`;
+  assert.equal(join(tooLong, `pi-cmp-${uid}`, `${b}.sock`).length, 103);
+  assert.equal(Buffer.byteLength(join(tooLong, `pi-cmp-${uid}`, `${b}.sock`)), 104);
+  assert.throws(() => conversationSocketPath(b, tooLong), /No Companion socket address fits/u);
 });
 
 test("one-pane Herdr launch splits the invoker right without taking focus", async () => {
@@ -213,12 +248,18 @@ test("one preselected reference drives launch and the created HostConnection pat
     const result = await creator.create(configuration);
 
     assert.equal(result.isOk() && result.value, b);
-    assert.equal((await stat(conversationSocketPath(a, tmpdir()))).isSocket(), true);
-    assert.equal((await stat(conversationSocketPath(b, tmpdir()))).isSocket(), true);
+    const parentSocket = conversationSocketPath(a, tmpdir());
+    const childSocket = conversationSocketPath(b, tmpdir());
+    assert.equal((await stat(parentSocket)).isSocket(), true);
+    assert.equal((await stat(childSocket)).isSocket(), true);
+    assert.equal(dirname(parentSocket), dirname(childSocket));
+    assert.equal((await stat(dirname(parentSocket))).mode & 0o777, 0o700);
   } finally {
     await creator.stop();
     await child?.stop();
   }
+  await assert.rejects(stat(conversationSocketPath(a, tmpdir())), { code: "ENOENT" });
+  await assert.rejects(stat(conversationSocketPath(b, tmpdir())), { code: "ENOENT" });
 });
 
 test("incoming message introduces an unknown sender before local delivery", async () => {

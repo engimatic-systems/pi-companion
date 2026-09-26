@@ -116,7 +116,12 @@ actual package loading and owned isolated resources. See
 
 - One preselected native ID drives direct Herdr launch, Pi `--session-id`, and
   derived socket addressing.
-- Local setup resolves one `tmpdir()` socket root and derives connection paths.
+- Local setup resolves one `tmpdir()` socket root and derives full-ID paths under
+  the private `pi-cmp-<uid>` directory. The shared Linux/macOS 103-byte UTF-8
+  pathname guard accepts 103, rejects 104 (including multibyte roots), and
+  allows the reported macOS temporary root with a full native ID.
+- Address resolution agrees between sender and receiver; owned sockets are
+  removed on shutdown and the per-user directory retains private permissions.
 - Successful creation introduces the creator at the created Runtime before
   returning its reference.
 - Incoming messages introduce unknown senders before local Pi delivery;
