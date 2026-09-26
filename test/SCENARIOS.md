@@ -29,16 +29,28 @@ actual package loading and owned isolated resources. See
   coordinates only connection lifecycle.
 - Successful creation introduces and returns the created reference.
 - Creation failure propagates without inserting the attempted reference.
-- Submission requires local destination knowledge and ordinary non-empty bounded
-  text, then returns HostConnection acceptance or its typed failure.
-- Host-reported unavailability forgets only that destination.
-- Rejected or indeterminate submission retains the destination and is not
-  replayed.
+- Explicit introduction changes only local state, persists before success, and
+  does not contact Host; repetition and self-introduction are no-ops.
+- Submission validates ordinary non-empty bounded text and excludes self-send
+  before effects. An unknown reference is introduced and saved locally before
+  one Host submission; failed persistence blocks submission.
+- Host-reported unavailability forgets only that destination, including one
+  first introduced by this send.
+- Rejected or indeterminate submission retains the destination, including one
+  first introduced by this send, and is not replayed.
 
 ## Human command language
 
-- Human command parsing exposes the same `open`, `list`, `send`, and `forget`
-  action shapes used by structured input.
+- Bare/whitespace-only input and exact `help` return the same concise multiline
+  informational command help, including launch options and human local
+  introduction. With or without an active Runtime they do not launch, submit,
+  introduce, forget or write destination state. They notify as info, not error.
+- Non-help input retains its inactive Runtime precedence and existing syntax
+  errors when active; `help` inside an ordinary message stays literal text.
+- Human command parsing exposes the same `open`, `list`, `introduce`, `send`,
+  and `forget` action shapes used by structured input. `introduce` accepts one
+  exact destination token with surrounding whitespace and rejects missing or
+  extra tokens; reference validity remains in Actions.
 - Ordinary open text remains one literal message, including internal/trailing
   whitespace, newlines, quotes, backslashes, and embedded option-looking text.
 - A leading-hyphen open tail uses strict native `parseArgs` option grammar;
@@ -51,7 +63,9 @@ actual package loading and owned isolated resources. See
 ## Actions and launch selection
 
 - One canonical per-action schema derives the TypeScript action type and rejects
-  structured fields that are illegal for the selected action. Pi still
+  structured fields that are illegal for the selected action. `introduce` requires
+  a valid reference, with no message or launch selection; `send` validates its
+  supplied reference and no longer requires existing local knowledge. Pi still
   advertises the existing broader flattened tool parameter object.
 - Human and structured open actions resolve through the same execution path.
 - Open without text invokes ordinary `Runtime.open` and does not submit. Open
@@ -72,7 +86,9 @@ actual package loading and owned isolated resources. See
 
 - Registration exposes exactly the `companion` human command and structured
   tool, with the advertised schema and notification/tool-response rendering.
-- Human handling checks for an active Runtime before parsing. Structured handling
+  Human and structured `introduce` share the action and local-only outcome.
+- Human handling presents recognized help before checking for an active Runtime;
+  non-help input still checks Runtime before parsing. Structured handling
   validates the canonical action before reporting an inactive Runtime.
 - Human parsing and structured decoding both invoke the same action execution;
   Pi integration owns presentation rather than action meaning.
@@ -91,7 +107,10 @@ actual package loading and owned isolated resources. See
 - Corrupt state prevents Runtime/listener activation with its exact path and
   cause, while preserving the bad file. Listener bind failure cleans its
   candidate and leaves stored knowledge unchanged.
-- Incoming introduction persists before attributed Pi delivery.
+- Incoming introduction persists before attributed Pi delivery. Isolated
+  two-conversation composition shows explicit introduction changes only the
+  sender's state; reciprocal knowledge arises on ordinary receipt, and a reply
+  can follow without another introduction exchange.
 - Persistence makes no fsync/crash-recovery, concurrent same-ID writer, locking,
   journal, repair, replay, supervision, or peer-relaunch guarantee.
 
@@ -106,7 +125,12 @@ actual package loading and owned isolated resources. See
 
 - One preselected native ID drives direct Herdr launch, Pi `--session-id`, and
   derived socket addressing.
-- Local setup resolves one `tmpdir()` socket root and derives connection paths.
+- Local setup resolves one `tmpdir()` socket root and derives full-ID paths under
+  the private `pi-cmp-<uid>` directory. The shared Linux/macOS 103-byte UTF-8
+  pathname guard accepts 103, rejects 104 (including multibyte roots), and
+  allows the reported macOS temporary root with a full native ID.
+- Address resolution agrees between sender and receiver; owned sockets are
+  removed on shutdown and the per-user directory retains private permissions.
 - Successful creation introduces the creator at the created Runtime before
   returning its reference.
 - Incoming messages introduce unknown senders before local Pi delivery;

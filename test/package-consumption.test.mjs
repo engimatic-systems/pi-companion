@@ -50,7 +50,7 @@ test("Pi discovers the Companion extension and skill through the package manifes
   const outputPath = join(directory, "registrations.json");
   const probePath = join(directory, "probe.ts");
   const sessionId = randomUUID();
-  const socketPath = join(tmpdir(), `pi-companion-${process.getuid()}`, `${sessionId}.sock`);
+  const socketPath = join(tmpdir(), `pi-cmp-${process.getuid()}`, `${sessionId}.sock`);
   mkdirSync(agentDir, { recursive: true });
   writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: [root] }), "utf8");
   writeFileSync(probePath, `
@@ -94,6 +94,7 @@ test("Pi discovers the Companion extension and skill through the package manifes
 
   try {
     await waitForFile(outputPath, child, () => stderr);
+    await waitForFile(socketPath, child, () => stderr);
     const registrations = JSON.parse(readFileSync(outputPath, "utf8"));
     const entrypoint = join(root, "src", "index.ts");
     const companionCommands = registrations.commands.filter(

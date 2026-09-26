@@ -42,6 +42,11 @@ const sendActionSchema = Type.Object({
   message: messageSchema,
 }, { additionalProperties: false });
 
+const introduceActionSchema = Type.Object({
+  action: Type.Literal("introduce"),
+  destination: Type.String(),
+}, { additionalProperties: false });
+
 const forgetActionSchema = Type.Object({
   action: Type.Literal("forget"),
   destination: Type.String(),
@@ -52,6 +57,7 @@ export const actionSchema = Type.Union([
   openActionSchema,
   listActionSchema,
   sendActionSchema,
+  introduceActionSchema,
   forgetActionSchema,
 ]);
 export type Action = Static<typeof actionSchema>;
@@ -60,6 +66,7 @@ const actionNames = [
   openActionSchema.properties.action.const,
   listActionSchema.properties.action.const,
   sendActionSchema.properties.action.const,
+  introduceActionSchema.properties.action.const,
   forgetActionSchema.properties.action.const,
 ] as const;
 
@@ -68,7 +75,7 @@ const actionNames = [
 export const toolContract = {
   name: "companion",
   label: "Companion",
-  description: "Create a live conversation, list local destinations, submit an ordinary message, or forget locally.",
+  description: "Create a live conversation, list or introduce local destinations, submit an ordinary message, or forget locally.",
   parameters: Type.Object({
     action: StringEnum(actionNames),
     destination: Type.Optional(Type.String()),
@@ -89,6 +96,7 @@ export type Outcome =
   | { status: "opened"; reference: ConversationReference; submission?: SubmissionAcceptance["status"] }
   | { status: "listed"; reference: ConversationReference; destinations: readonly ConversationReference[] }
   | { status: "accepted"; destination: ConversationReference }
+  | { status: "introduced"; destination: ConversationReference }
   | { status: "forgotten"; destination: ConversationReference; removed: boolean }
   | {
       status: "error";
@@ -156,6 +164,11 @@ export async function runAction(
         reference: destination,
         destinationForgotten: submitted.error.kind === "unavailable",
       };
+    }
+    case "introduce": {
+      const destination = conversationReference(action.destination);
+      runtime.introduce(destination);
+      return { status: "introduced", destination };
     }
     case "forget": {
       const destination = conversationReference(action.destination);

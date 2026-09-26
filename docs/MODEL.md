@@ -52,9 +52,10 @@ next destination collection $D_c'$:
 \end{aligned}
 ```
 
-Introduction is idempotent; self-introduction does nothing. Forgetting changes
-neither the other conversation nor its knowledge, and does not forbid later
-reintroduction.
+Introduction is idempotent; self-introduction does nothing. Explicit introduction
+changes only local knowledge: it does not contact the referenced conversation
+or establish reciprocal knowledge. Forgetting changes neither the other
+conversation nor its knowledge, and does not forbid later reintroduction.
 
 Successful creation of conversation $d$ chooses a fresh identifier $d_i$ and
 introduces both peers, with the creator as the new conversation's initial
@@ -107,10 +108,13 @@ submission as:
               \mathrm{rejected},\mathrm{indeterminate}\}.
 ```
 
-The public send operation requires $r \in D_c$. The notation above describes
-the host exchange, not local validation or persistence failures. Optional text
-after creation uses the same ordinary submission; a failed send does not undo
-successful creation.
+The public send operation validates the reference and message, excludes self-send,
+then composes $\mathrm{introduce}(c,r)$ with the host submission above. The
+reference need not already belong to $D_c$. Introduction must succeed under the
+persistence rule before submission is attempted; invalid requests have no effects.
+The notation above describes the host exchange, not local validation or
+persistence failures. Optional text after creation uses the same ordinary
+submission; a failed send does not undo successful creation.
 
 Acceptance means the host accepted the submission, not that the agent read it,
 finished work, or processed it exactly once. Indeterminate delivery expresses
@@ -118,9 +122,9 @@ uncertainty at the sender; it does not imply that the receiver's model or
 persistent state stayed unchanged. No message is automatically replayed.
 
 An $\mathrm{unavailable}$ outcome invokes $\mathrm{forget}(c,r)$, subject
-to the persistence rule. The other outcomes cause no submission-induced change
-to $D_c$. Availability can change without changing identity, and knowing a peer
-does not keep it running.
+to the persistence rule. The other outcomes cause no further submission-induced
+change to $D_c$. Availability can change without changing identity, and knowing
+a peer does not keep it running.
 
 ## Assumptions and limits
 

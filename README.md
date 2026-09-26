@@ -35,19 +35,31 @@ automatically loaded in them.
 ## Use
 
 ```text
+/companion
+/companion help
 /companion open
 /companion open Review this interface and report what matters.
 /companion list
+/companion introduce <conversation-id>
 /companion send <conversation-id> Consider the failure path too.
 /companion forget <conversation-id>
 ```
 
-The agent has the same `open`, `list`, `send`, and `forget` actions through the
-`companion` tool. Destinations are selected by their exact native Pi session IDs,
-not local names.
+Bare `/companion` (including whitespace-only input) and `/companion help` show
+informational command help, even when the conversation's Runtime is inactive.
+They do not create, message, introduce, or forget a conversation.
 
-Opening a conversation introduces both peers. Every incoming message introduces
-its sender before delivery to local Pi. Introductions are idempotent. Forgetting
+The agent has `open`, `list`, `send`, `introduce`, and `forget` actions through the
+`companion` tool. `/companion introduce <conversation-id>` and the structured
+`{action:"introduce", destination:"<native-session-id>"}` both add a reference
+locally without contacting the other conversation. Destinations are selected by
+their exact native Pi session IDs, not local names.
+
+Opening a conversation introduces both peers. Ordinary send accepts an unknown
+reference: it saves the sender's local introduction before submitting, then the
+incoming message introduces its sender at the receiver before delivery to local
+Pi. Explicit local introduction alone never introduces the sender at the receiver.
+Introductions are idempotent and self-introduction does nothing. Forgetting
 is local: it does not stop the other conversation, delete its history, or prevent
 a later message from introducing it again. Destination knowledge is not an
 access-control list or evidence of availability.
@@ -124,18 +136,21 @@ block Pi.
 - Creation can fail after launching a Pi process or pane. It may remain; no
   rollback or automatic relaunch is attempted. If the optional message fails
   after successful creation, the result retains the created reference.
-- Submission failure before connection is unavailable and causes local forgetting.
+- Invalid messages and self-send have no effects. A failed local save prevents
+  submission (including when the destination was previously unknown).
+  Submission failure before connection is unavailable and causes local forgetting.
   A rejected submission or failure after connection retains the destination;
   delivery after connection can be indeterminate. Messages are never replayed
   automatically. Storage errors can prevent a requested forgetting operation.
 - Peers may forget a conversation they find unavailable during downtime. Stored
   knowledge does not keep peers running, resume interrupted work, or reclaim
   stale sockets.
-- All participants must resolve the same `tmpdir()` socket root. A custom
-  `TMPDIR` is not forwarded through Herdr launch; different parent/child roots
-  are unsupported and can cause failure after launch.
-- There is no process supervision, event bridge, local naming, persistent
-  extension settings, or isolation from hostile code running as the same user.
+- Participants must resolve the same `tmpdir()` socket root and socket address
+  convention. Socket paths use `<tmpdir>/pi-cmp-<uid>/<full-native-id>.sock` with
+  a 103-byte UTF-8 pathname guard for Linux/macOS (excluding the trailing NUL);
+  longer roots can still fail explicitly. A custom `TMPDIR` is not forwarded
+  through Herdr launch; different parent/child roots are unsupported and can
+  cause failure after launch.
 
 ## Disable
 

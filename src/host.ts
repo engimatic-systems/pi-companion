@@ -22,7 +22,8 @@ import {
 export { MAX_MESSAGE_BYTES, type SubmissionFailure } from "./socket-transport.js";
 
 const EXCHANGE_TIMEOUT_MS = 5_000;
-const SOCKET_PATH_LIMIT = 100;
+// Linux and macOS filesystem socket pathname budget (excludes trailing NUL).
+const SOCKET_PATH_LIMIT = 103;
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -91,7 +92,7 @@ export function conversationSocketPath(
   socketRoot: string,
 ): string {
   const uid = typeof process.getuid === "function" ? process.getuid() : "user";
-  const path = join(socketRoot, `pi-companion-${uid}`, `${reference}.sock`);
+  const path = join(socketRoot, `pi-cmp-${uid}`, `${reference}.sock`);
   if (Buffer.byteLength(path) > SOCKET_PATH_LIMIT) {
     throw new Error("No Companion socket address fits the platform limit.");
   }
