@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -48,6 +48,8 @@ class TestHostConnection implements HostConnection {
   creation: ResultAsync<ConversationReference, CreationFailure> = okAsync(created);
   submission: ResultAsync<SubmissionAcceptance, SubmissionFailure> = okAsync({ status: "accepted" });
   expectedSubmission?: { destination: ConversationReference; message: string };
+  submissions = 0;
+  onSubmission?: () => void;
   #introduce?: (reference: ConversationReference) => void;
 
   async start(onIntroduction: (reference: ConversationReference) => void): Promise<void> {
@@ -62,6 +64,8 @@ class TestHostConnection implements HostConnection {
     destination: ConversationReference,
     message: string,
   ): ResultAsync<SubmissionAcceptance, SubmissionFailure> {
+    this.submissions += 1;
+    this.onSubmission?.();
     if (this.expectedSubmission
         && (destination !== this.expectedSubmission.destination || message !== this.expectedSubmission.message)) {
       return errAsync({ kind: "rejected", code: "unexpected", message: "Unexpected ordinary submission." });
@@ -136,29 +140,96 @@ test("Runtime returns Host acceptance for ordinary submission to a known destina
   assert.deepEqual(companion.destinations(), [peer]);
 });
 
-test("Runtime rejects a destination absent from Companion state", async () => {
+test("explicit introduction persists locally without Host effects; repeat and self are no-ops", () => {
+  const host = new TestHostConnection();
+  const agentDir = join(testRoot, "explicit-introduction");
+  const companion = new PersistentCompanion(owner, agentDir);
+  const runtime = new Runtime(companion, host);
+  runtime.introduce(owner);
+  assert.deepEqual(companion.destinations(), []);
+  runtime.introduce(peer);
+  const path = join(agentDir, "companion", `${owner}.json`);
+  assert.equal(readFileSync(path, "utf8"), `["${peer}"]\n`);
+  chmodSync(join(agentDir, "companion"), 0o500);
+  try {
+    runtime.introduce(peer);
+    runtime.introduce(owner);
+  } finally {
+    chmodSync(join(agentDir, "companion"), 0o700);
+  }
+  assert.deepEqual(new PersistentCompanion(owner, agentDir).destinations(), [peer]);
+  assert.equal(host.submissions, 0);
+});
+
+test("Runtime introduces an unknown reference on disk before ordinary Host submission", async () => {
+  const host = new TestHostConnection();
+  const agentDir = join(testRoot, "send-unknown");
+  const companion = new PersistentCompanion(owner, agentDir);
+  const runtime = new Runtime(companion, host);
+  host.expectedSubmission = { destination: peer, message: "hello" };
+  host.onSubmission = () => {
+    assert.deepEqual(companion.destinations(), [peer]);
+    assert.deepEqual(new PersistentCompanion(owner, agentDir).destinations(), [peer]);
+  };
+
+  const result = await runtime.submit(peer, "hello");
+
+  assert.equal(result.isOk() && result.value.status, "accepted");
+  assert.equal(host.submissions, 1);
+});
+
+test("invalid text and self-send leave an unknown reference unintroduced and do not submit", async () => {
   const host = new TestHostConnection();
   const companion = new Companion(owner);
   const runtime = new Runtime(companion, host);
 
-  const result = await runtime.submit(peer, "hello");
+  const invalid = await runtime.submit(peer, "");
+  const oversized = await runtime.submit(peer, "x".repeat(MAX_MESSAGE_BYTES + 1));
+  const self = await runtime.submit(owner, "hello");
 
-  assert.equal(result.isErr() && result.error.kind, "unknown_destination");
+  assert.equal(invalid.isErr() && invalid.error.kind, "invalid_message");
+  assert.equal(oversized.isErr() && oversized.error.kind, "invalid_message");
+  assert.equal(self.isErr() && self.error.kind, "self_send");
   assert.deepEqual(companion.destinations(), []);
+  assert.equal(host.submissions, 0);
 });
 
-test("Runtime forgets only the destination Host reports unavailable", async () => {
+test("failed local save blocks submission and preserves path and cause", () => {
   const host = new TestHostConnection();
-  const companion = new Companion(owner);
-  companion.introduce(peer);
+  const agentDir = join(testRoot, "send-failed-save");
+  const directory = join(agentDir, "companion");
+  const companion = new PersistentCompanion(owner, agentDir);
+  const runtime = new Runtime(companion, host);
+  mkdirSync(directory, { recursive: true });
+  chmodSync(directory, 0o500);
+  try {
+    assert.throws(() => runtime.submit(peer, "hello"), (failure: unknown) => failure instanceof Error
+      && failure.message.includes(join(directory, `${owner}.json`))
+      && failure.cause instanceof Error);
+    assert.deepEqual(companion.destinations(), []);
+    assert.equal(host.submissions, 0);
+  } finally {
+    chmodSync(directory, 0o700);
+  }
+});
+
+test("Runtime forgets only the newly introduced destination Host reports unavailable", async () => {
+  const host = new TestHostConnection();
+  const agentDir = join(testRoot, "send-unavailable");
+  const companion = new PersistentCompanion(owner, agentDir);
   companion.introduce(thirdParty);
   host.submission = errAsync({ kind: "unavailable", message: "not listening" });
+  host.onSubmission = () => {
+    assert.deepEqual(new PersistentCompanion(owner, agentDir).destinations(), [peer, thirdParty]);
+  };
   const runtime = new Runtime(companion, host);
 
   const result = await runtime.submit(peer, "hello");
 
   assert.equal(result.isErr() && result.error.kind, "unavailable");
   assert.deepEqual(companion.destinations(), [thirdParty]);
+  assert.deepEqual(new PersistentCompanion(owner, agentDir).destinations(), [thirdParty]);
+  assert.equal(host.submissions, 1);
 });
 
 for (const failure of [
@@ -168,14 +239,16 @@ for (const failure of [
   test(`Runtime retains a destination after ${failure.kind} submission`, async () => {
     const host = new TestHostConnection();
     host.submission = errAsync(failure);
-    const companion = new Companion(owner);
-    companion.introduce(peer);
+    const agentDir = join(testRoot, `send-${failure.kind}`);
+    const companion = new PersistentCompanion(owner, agentDir);
     const runtime = new Runtime(companion, host);
 
     const result = await runtime.submit(peer, "hello");
 
     assert.equal(result.isErr() && result.error.kind, failure.kind);
     assert.deepEqual(companion.destinations(), [peer]);
+    assert.deepEqual(new PersistentCompanion(owner, agentDir).destinations(), [peer]);
+    assert.equal(host.submissions, 1);
   });
 }
 

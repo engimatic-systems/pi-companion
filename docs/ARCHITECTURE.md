@@ -115,10 +115,14 @@ Companion. An incoming message is delivered only after introduction succeeds.
 A storage exception can therefore become a remote rejection through the existing
 handler-error path; it is not reported as a successful state change.
 
-Runtime submission validates known destination and bounded, non-empty text,
-then submits once:
+Runtime exposes explicit local introduction by routing it directly to Companion,
+with no Host operation. Actions validates the supplied reference before calling
+Runtime; the structured tool exposes `introduce`, not the human command language.
+Runtime submission validates bounded, non-empty text and rejects self-send before
+any effect. A destination need not be previously known:
 
 ```text
+companion.introduce(d)              # save before adopting; may throw
 outcome = connection.submit(d, message)
 if outcome is unavailable:
     companion.forget(d)
@@ -127,7 +131,7 @@ return outcome
 
 Only unavailability causes automatic forgetting. Rejected or indeterminate
 submissions retain the destination. A save error remains an exception, not a
-successful forgetting or another expected transport-outcome variant.
+successful introduction, forgetting or another expected transport-outcome variant.
 
 Actions compose `open` with optional ordinary `submit`. There is no compound
 Runtime operation, special first-message type, or different delivery semantics.

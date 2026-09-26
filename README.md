@@ -42,12 +42,17 @@ automatically loaded in them.
 /companion forget <conversation-id>
 ```
 
-The agent has the same `open`, `list`, `send`, and `forget` actions through the
-`companion` tool. Destinations are selected by their exact native Pi session IDs,
-not local names.
+The agent has `open`, `list`, `send`, `introduce`, and `forget` actions through the
+`companion` tool. For example, `{action:"introduce", destination:"<native-session-id>"}`
+adds that reference locally without contacting the other conversation. There is
+no human `introduce` command. Destinations are selected by their exact native Pi
+session IDs, not local names.
 
-Opening a conversation introduces both peers. Every incoming message introduces
-its sender before delivery to local Pi. Introductions are idempotent. Forgetting
+Opening a conversation introduces both peers. Ordinary send accepts an unknown
+reference: it saves the sender's local introduction before submitting, then the
+incoming message introduces its sender at the receiver before delivery to local
+Pi. Explicit tool introduction alone never introduces the sender at the receiver.
+Introductions are idempotent and self-introduction does nothing. Forgetting
 is local: it does not stop the other conversation, delete its history, or prevent
 a later message from introducing it again. Destination knowledge is not an
 access-control list or evidence of availability.
@@ -124,7 +129,9 @@ block Pi.
 - Creation can fail after launching a Pi process or pane. It may remain; no
   rollback or automatic relaunch is attempted. If the optional message fails
   after successful creation, the result retains the created reference.
-- Submission failure before connection is unavailable and causes local forgetting.
+- Invalid messages and self-send have no effects. A failed local save prevents
+  submission (including when the destination was previously unknown).
+  Submission failure before connection is unavailable and causes local forgetting.
   A rejected submission or failure after connection retains the destination;
   delivery after connection can be indeterminate. Messages are never replayed
   automatically. Storage errors can prevent a requested forgetting operation.

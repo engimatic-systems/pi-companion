@@ -12,7 +12,7 @@ import {
 
 export type RuntimeSubmissionFailure =
   | { kind: "invalid_message"; message: string }
-  | { kind: "unknown_destination"; destination: ConversationReference; message: string }
+  | { kind: "self_send"; message: string }
   | SubmissionFailure;
 
 /** Coordinates Host operations with changes to one conversation-local model. */
@@ -29,6 +29,11 @@ export class Runtime {
   /** Returns the local destination snapshot without probing Host. */
   destinations(): readonly ConversationReference[] {
     return this.companion.destinations();
+  }
+
+  /** Introduces a reference locally without contacting Host; persistence failures throw. */
+  introduce(reference: ConversationReference): void {
+    this.companion.introduce(reference);
   }
 
   /** Applies an explicit local forgetting request without changing Host. */
@@ -57,8 +62,8 @@ export class Runtime {
   }
 
   /**
-   * Submits valid text to a known destination exactly once. Only
-   * Host-reported unavailability triggers local forgetting.
+   * Validates text and excludes self-send before any effect, then persists local
+   * introduction before one Host submission. Only unavailability forgets it.
    */
   submit(
     destination: ConversationReference,
@@ -66,13 +71,10 @@ export class Runtime {
   ): ResultAsync<SubmissionAcceptance, RuntimeSubmissionFailure> {
     const invalid = invalidMessage(message);
     if (invalid) return errAsync(invalid);
-    if (!this.companion.has(destination)) {
-      return errAsync({
-        kind: "unknown_destination",
-        destination,
-        message: `Conversation ${destination} is not in the local destination collection.`,
-      });
+    if (destination === this.reference) {
+      return errAsync({ kind: "self_send", message: "A conversation cannot send a message to itself." });
     }
+    this.introduce(destination);
     return this.connection.submit(destination, message).mapErr((failure): RuntimeSubmissionFailure => {
       if (failure.kind === "unavailable") this.companion.forget(destination);
       return failure;

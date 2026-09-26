@@ -78,10 +78,53 @@ test("structured decoding uses the canonical per-action field contract", () => {
   const action: Action = decodeAction({ action: "open", model: "target" });
 
   assert.deepEqual(action, { action: "open", model: "target" });
-  assert.throws(
-    () => decodeAction({ action: "list", model: "not-for-list" }),
-    /Invalid Companion action fields\./u,
+  assert.deepEqual(decodeAction({ action: "introduce", destination: "peer" }),
+    { action: "introduce", destination: "peer" });
+  for (const invalid of [
+    { action: "list", model: "not-for-list" },
+    { action: "introduce" },
+    { action: "introduce", destination: "peer", message: "not allowed" },
+    { action: "introduce", destination: "peer", provider: "not allowed" },
+  ]) {
+    assert.throws(() => decodeAction(invalid), /Invalid Companion action fields\./u);
+  }
+});
+
+test("introduce validates reference in Actions and persists only local knowledge", async () => {
+  const connection = new OpenThenRejectConnection();
+  const runtime = new Runtime(new Companion(owner), connection);
+  const context = defaultSelectionContext();
+  await assert.rejects(
+    runAction(runtime, decodeAction({ action: "introduce", destination: "bad/ref" }), context),
+    /Conversation reference is not a safe bounded native session ID/u,
   );
+  assert.deepEqual(runtime.destinations(), []);
+
+  assert.deepEqual(await runAction(runtime, { action: "introduce", destination: created }, context),
+    { status: "introduced", destination: created });
+  assert.deepEqual(await runAction(runtime, { action: "introduce", destination: owner }, context),
+    { status: "introduced", destination: owner });
+  assert.deepEqual(runtime.destinations(), [created]);
+  assert.equal(connection.submissions, 0);
+  assert.deepEqual(connection.configurations, []);
+});
+
+test("send validates reference in Actions and introduces an unknown destination via Runtime", async () => {
+  const connection = new OpenThenRejectConnection();
+  const runtime = new Runtime(new Companion(owner), connection);
+  const context = defaultSelectionContext();
+  await assert.rejects(runAction(runtime, {
+    action: "send", destination: "bad/ref", message: "hello",
+  }, context), /Conversation reference is not a safe bounded native session ID/u);
+  assert.deepEqual(runtime.destinations(), []);
+
+  const result = await runAction(runtime, { action: "send", destination: created, message: "hello" }, context);
+  assert.deepEqual(result, {
+    status: "error", kind: "rejected", message: "not accepted", reference: created,
+    destinationForgotten: false,
+  });
+  assert.deepEqual(runtime.destinations(), [created]);
+  assert.equal(connection.submissions, 1);
 });
 
 test("human and structured provider-only selection resolve the same configuration", async () => {
