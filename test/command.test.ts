@@ -1,7 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseCommand } from "../src/command.js";
+import { humanCommand, isHelpRequest, parseCommand } from "../src/command.js";
+
+test("only bare or exact help requests select informational command help", async () => {
+  for (const input of ["", "  \t\n  ", "help", "  help  \n"]) {
+    assert.equal(isHelpRequest(input), true, JSON.stringify(input));
+  }
+  assert.match(humanCommand.help, /\/companion open/u);
+  assert.match(humanCommand.help, /\/companion send <conversation-id> <message>/u);
+  assert.match(humanCommand.help, /\/companion forget <conversation-id>/u);
+  assert.match(humanCommand.help, /\/companion list/u);
+  assert.match(humanCommand.help, /--provider PROVIDER.*--model MODEL.*--thinking LEVEL.*-- MESSAGE/u);
+  assert.match(humanCommand.help, /tool-only.*introduce/u);
+  assert.match(humanCommand.help, /does not contact the peer/u);
+  assert.equal(humanCommand.help.includes("/companion introduce"), false);
+
+  for (const input of ["help extra", "help --", "helps", "open help", "send peer help"]) {
+    assert.equal(isHelpRequest(input), false, input);
+  }
+  await assert.rejects(parseCommand("help extra"), /Usage:/u);
+  assert.deepEqual(await parseCommand("open help"), { action: "open", message: "help" });
+  assert.deepEqual(await parseCommand("send peer help"), {
+    action: "send", destination: "peer", message: "help",
+  });
+});
 
 test("ordinary open text remains one literal message", async () => {
   const message = "Review  \\\"quoted\\\" \\\\path\nnext --thinking max  ";

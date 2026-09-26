@@ -4,8 +4,21 @@ import { THINKING_LEVELS, type Action } from "./actions.js";
 
 export const humanCommand = {
   name: "companion",
-  description: "Create, list, message, or locally forget Companion conversations.",
+  description: "Create, list, message, locally forget, or show Companion help.",
   usage: "Usage: /companion open [message] | open [--provider PROVIDER] [--model MODEL] [--thinking LEVEL] [-- MESSAGE] | list | send <conversation-id> <message> | forget <conversation-id>",
+  help: [
+    "Companion commands:",
+    "  /companion                         Show this help.",
+    "  /companion help                    Show this help.",
+    "  /companion open [message]          Create a conversation; optional ordinary message.",
+    "  /companion open [--provider PROVIDER] [--model MODEL] [--thinking LEVEL] [-- MESSAGE]",
+    "                                     Select launch options; -- starts literal message text.",
+    "  /companion list                    List local destinations, not availability.",
+    "  /companion send <conversation-id> <message>  Introduce locally, then submit ordinary text.",
+    "  /companion forget <conversation-id>          Forget locally; does not stop the peer.",
+    "The tool-only introduce action remembers a conversation ID locally: ask the agent",
+    "to remember it using the companion tool. This does not contact the peer.",
+  ].join("\n"),
 } as const;
 
 interface FramedCommand {
@@ -27,6 +40,12 @@ const openOptions = {
   model: { type: "string" },
   thinking: { type: "string" },
 } as const;
+
+/** Recognizes only bare input or the exact help verb, without requiring Runtime. */
+export function isHelpRequest(raw: string): boolean {
+  const command = frameCommand(raw);
+  return command.name === "" || (command.name === "help" && command.tail === undefined);
+}
 
 /**
  * Parses raw human text into an `Action` without executing Runtime effects.

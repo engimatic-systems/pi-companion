@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +18,7 @@ import {
   conversationSocketPath,
   createHostConnection,
 } from "../src/host.js";
+import { humanCommand } from "../src/command.js";
 import companionExtension from "../src/index.js";
 
 const testRoot = mkdtempSync(join(tmpdir(), "companion-index-"));
@@ -162,6 +163,64 @@ test("Pi exposes the Companion command and tool", () => {
   assert.deepEqual([...harness.tools.keys()], ["companion"]);
 });
 
+test("bare and exact help are informational without an active Runtime or other effects", async () => {
+  const agentDir = isolatedAgentDir();
+  const state = new TestSessionState();
+  const harness = new PiLifecycleHarness(owner, state, agentDir);
+  for (const input of ["", " \t\n ", "help", "  help \n "]) {
+    await harness.command(input);
+    assert.deepEqual(harness.notifications.at(-1), { message: humanCommand.help, type: "info" });
+  }
+  assert.equal(harness.notifications.length, 4);
+  assert.deepEqual(harness.execCalls, []);
+  assert.deepEqual(harness.deliveries, []);
+  assert.deepEqual(state.entries, []);
+  assert.equal(existsSync(join(agentDir, "companion", `${owner}.json`)), false);
+  await assert.rejects(stat(conversationSocketPath(owner, tmpdir())), { code: "ENOENT" });
+
+  for (const input of ["help extra", "list", "send peer hello", "unknown"]) {
+    await harness.command(input);
+    assert.deepEqual(harness.notifications.at(-1), {
+      message: "Companion Runtime is not active for this conversation.", type: "error",
+    });
+  }
+});
+
+test("bare and exact help leave an active conversation and destinations untouched", async () => {
+  const reference = conversationReference("30900000-0000-4000-8000-000000000001");
+  const peer = conversationReference("30900000-0000-4000-8000-000000000002");
+  const agentDir = isolatedAgentDir();
+  const state = new TestSessionState();
+  new PersistentCompanion(reference, agentDir).introduce(peer);
+  const path = join(agentDir, "companion", `${reference}.json`);
+  const original = readFileSync(path, "utf8");
+  const harness = new PiLifecycleHarness(reference, state, agentDir);
+  await harness.start("startup");
+  try {
+    for (const input of ["", "  \n ", "help", "  help \t"]) {
+      await harness.command(input);
+      assert.deepEqual(harness.notifications.at(-1), { message: humanCommand.help, type: "info" });
+    }
+    assert.equal(harness.notifications.length, 4);
+    assert.equal(readFileSync(path, "utf8"), original);
+    assert.deepEqual(harness.execCalls, []);
+    assert.deepEqual(harness.deliveries, []);
+    assert.deepEqual(state.entries, []);
+
+    await harness.command("help extra");
+    assert.deepEqual(harness.notifications.at(-1), { message: humanCommand.usage, type: "error" });
+    await harness.command("unknown");
+    assert.deepEqual(harness.notifications.at(-1), { message: humanCommand.usage, type: "error" });
+    assert.deepEqual(harness.execCalls, []);
+    assert.equal(readFileSync(path, "utf8"), original);
+    await harness.command("list");
+    assert.equal(harness.notifications.at(-1)?.message,
+      `Conversation ${reference} destinations:\n${peer}`);
+  } finally {
+    await harness.shutdown("quit");
+  }
+});
+
 test("Pi registration preserves metadata and inactive-input error precedence", async () => {
   const harness = new PiLifecycleHarness(owner, new TestSessionState());
   const command = harness.commands.get("companion");
@@ -170,11 +229,12 @@ test("Pi registration preserves metadata and inactive-input error precedence", a
   assert.ok(tool);
 
   assert.equal(command.description,
-    "Create, list, message, or locally forget Companion conversations.");
+    "Create, list, message, locally forget, or show Companion help.");
   assert.equal(tool.label, "Companion");
   assert.equal(tool.description,
     "Create a live conversation, list or introduce local destinations, submit an ordinary message, or forget locally.");
   assert.equal(Check(tool.parameters, { action: "list", model: "advertised-but-illegal" }), true);
+  assert.equal(Check(tool.parameters, { action: "help" }), false);
 
   await harness.command("not-a-command");
   assert.deepEqual(harness.notifications.at(-1), {
