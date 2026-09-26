@@ -144,13 +144,6 @@ block Pi.
   longer roots can still fail explicitly. A custom `TMPDIR` is not forwarded
   through Herdr launch; different parent/child roots are unsupported and can
   cause failure after launch.
-- The `pi-cmp-<uid>` directory replaces the earlier `pi-companion-<uid>`
-  convention. Update and restart/reload communicating sessions together;
-  persisted destination IDs remain valid and need no migration. Mixed versions
-  resolve different socket paths, so submission can appear unavailable and
-  trigger ordinary local forgetting. This is not a compatibility alias.
-- There is no process supervision, event bridge, local naming, persistent
-  extension settings, or isolation from hostile code running as the same user.
 
 ## Disable
 
