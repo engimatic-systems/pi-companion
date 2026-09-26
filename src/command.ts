@@ -4,8 +4,8 @@ import { THINKING_LEVELS, type Action } from "./actions.js";
 
 export const humanCommand = {
   name: "companion",
-  description: "Create, list, message, locally forget, or show Companion help.",
-  usage: "Usage: /companion open [message] | open [--provider PROVIDER] [--model MODEL] [--thinking LEVEL] [-- MESSAGE] | list | send <conversation-id> <message> | forget <conversation-id>",
+  description: "Create, list, introduce, message, locally forget, or show Companion help.",
+  usage: "Usage: /companion open [message] | open [--provider PROVIDER] [--model MODEL] [--thinking LEVEL] [-- MESSAGE] | list | introduce <conversation-id> | send <conversation-id> <message> | forget <conversation-id>",
   help: [
     "Companion commands:",
     "  /companion                         Show this help.",
@@ -14,10 +14,10 @@ export const humanCommand = {
     "  /companion open [--provider PROVIDER] [--model MODEL] [--thinking LEVEL] [-- MESSAGE]",
     "                                     Select launch options; -- starts literal message text.",
     "  /companion list                    List local destinations, not availability.",
+    "  /companion introduce <conversation-id>       Remember locally; does not contact the peer.",
     "  /companion send <conversation-id> <message>  Introduce locally, then submit ordinary text.",
     "  /companion forget <conversation-id>          Forget locally; does not stop the peer.",
-    "The tool-only introduce action remembers a conversation ID locally: ask the agent",
-    "to remember it using the companion tool. This does not contact the peer.",
+    "Introductions are local knowledge, not evidence that a peer is available.",
   ].join("\n"),
 } as const;
 
@@ -71,8 +71,8 @@ export function isHelpRequest(raw: string): boolean {
  * `"open"` and `"open --"` both construct an open action with no message.
  * Incomplete or malformed input rejects instead of constructing a partial
  * action. Fixed dispatch rejects unknown commands and a `list` tail; the
- * command parsers enforce `send` and `forget` arity. Option-mode message text
- * requires standalone `--`, and `send` requires both a destination and a
+ * command parsers enforce `introduce`, `send` and `forget` arity. Option-mode
+ * message text requires standalone `--`, and `send` requires a destination and a
  * non-empty literal message tail.
  */
 export async function parseCommand(raw: string): Promise<Action> {
@@ -85,8 +85,10 @@ export async function parseCommand(raw: string): Promise<Action> {
       return { action: "list" };
     case "send":
       return parseSend(command.tail);
+    case "introduce":
+      return { action: "introduce", destination: parseDestination(command.tail) };
     case "forget":
-      return parseForget(command.tail);
+      return { action: "forget", destination: parseDestination(command.tail) };
     default:
       throw new Error(humanCommand.usage);
   }
@@ -195,11 +197,11 @@ function parseSend(tail: string | undefined): Action {
   };
 }
 
-/** Accepts exactly one destination token; `forget` and `list` have no literal payload. */
-function parseForget(tail: string | undefined): Action {
+/** Accepts one destination token for fixed-arity `introduce` and `forget`. */
+function parseDestination(tail: string | undefined): string {
   const destination = tail?.trimEnd();
   if (!destination || /\s/u.test(destination)) throw new Error(humanCommand.usage);
-  return { action: "forget", destination };
+  return destination;
 }
 
 function isThinkingLevel(

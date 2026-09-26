@@ -42,13 +42,15 @@ actual package loading and owned isolated resources. See
 ## Human command language
 
 - Bare/whitespace-only input and exact `help` return the same concise multiline
-  informational command help, including launch options and tool-only local
+  informational command help, including launch options and human local
   introduction. With or without an active Runtime they do not launch, submit,
   introduce, forget or write destination state. They notify as info, not error.
 - Non-help input retains its inactive Runtime precedence and existing syntax
   errors when active; `help` inside an ordinary message stays literal text.
-- Human command parsing exposes the same `open`, `list`, `send`, and `forget`
-  action shapes used by structured input.
+- Human command parsing exposes the same `open`, `list`, `introduce`, `send`,
+  and `forget` action shapes used by structured input. `introduce` accepts one
+  exact destination token with surrounding whitespace and rejects missing or
+  extra tokens; reference validity remains in Actions.
 - Ordinary open text remains one literal message, including internal/trailing
   whitespace, newlines, quotes, backslashes, and embedded option-looking text.
 - A leading-hyphen open tail uses strict native `parseArgs` option grammar;
@@ -84,7 +86,7 @@ actual package loading and owned isolated resources. See
 
 - Registration exposes exactly the `companion` human command and structured
   tool, with the advertised schema and notification/tool-response rendering.
-  The tool accepts and renders local `introduce`; no human introduce spelling is added.
+  Human and structured `introduce` share the action and local-only outcome.
 - Human handling presents recognized help before checking for an active Runtime;
   non-help input still checks Runtime before parsing. Structured handling
   validates the canonical action before reporting an inactive Runtime.

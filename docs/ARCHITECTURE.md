@@ -118,8 +118,9 @@ A storage exception can therefore become a remote rejection through the existing
 handler-error path; it is not reported as a successful state change.
 
 Runtime exposes explicit local introduction by routing it directly to Companion,
-with no Host operation. Actions validates the supplied reference before calling
-Runtime; the structured tool exposes `introduce`, not the human command language.
+with no Host operation. The human `introduce <conversation-id>` command and the
+structured tool both use the canonical introduce action: Actions validates the
+supplied reference before calling Runtime.
 Runtime submission validates bounded, non-empty text and rejects self-send before
 any effect. A destination need not be previously known:
 

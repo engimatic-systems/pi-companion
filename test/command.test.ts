@@ -12,9 +12,9 @@ test("only bare or exact help requests select informational command help", async
   assert.match(humanCommand.help, /\/companion forget <conversation-id>/u);
   assert.match(humanCommand.help, /\/companion list/u);
   assert.match(humanCommand.help, /--provider PROVIDER.*--model MODEL.*--thinking LEVEL.*-- MESSAGE/u);
-  assert.match(humanCommand.help, /tool-only.*introduce/u);
+  assert.match(humanCommand.help, /\/companion introduce <conversation-id>.*locally/u);
   assert.match(humanCommand.help, /does not contact the peer/u);
-  assert.equal(humanCommand.help.includes("/companion introduce"), false);
+  assert.equal(humanCommand.help.includes("tool-only"), false);
 
   for (const input of ["help extra", "help --", "helps", "open help", "send peer help"]) {
     assert.equal(isHelpRequest(input), false, input);
@@ -75,13 +75,17 @@ test("human parsing rejects malformed open options with useful errors", async ()
   }
 });
 
-test("human command parsing exposes the same four conversation operations", async () => {
+test("human command parsing exposes the same five conversation operations", async () => {
   assert.deepEqual(await parseCommand("open"), { action: "open" });
   assert.deepEqual(await parseCommand("open first message"), {
     action: "open",
     message: "first message",
   });
   assert.deepEqual(await parseCommand("list"), { action: "list" });
+  assert.deepEqual(await parseCommand("introduce conversation-2"), {
+    action: "introduce",
+    destination: "conversation-2",
+  });
   assert.deepEqual(await parseCommand("send conversation-2 ordinary message"), {
     action: "send",
     destination: "conversation-2",
@@ -96,6 +100,19 @@ test("human command parsing exposes the same four conversation operations", asyn
     action: "forget",
     destination: "conversation-2",
   });
+});
+
+test("introduce requires exactly one destination token with ordinary surrounding whitespace", async () => {
+  for (const input of ["introduce peer", "  introduce \tpeer  \n", "introduce\npeer\t"]) {
+    assert.deepEqual(await parseCommand(input), { action: "introduce", destination: "peer" }, input);
+  }
+  // Reference validity belongs to Actions, not the human command parser.
+  assert.deepEqual(await parseCommand("introduce bad/ref"), {
+    action: "introduce", destination: "bad/ref",
+  });
+  for (const input of ["introduce", "introduce \t ", "introduce peer other", "introduce peer\nother"]) {
+    await assert.rejects(parseCommand(input), /Usage:/u, input);
+  }
 });
 
 test("incomplete human commands fail before Host effects", async () => {

@@ -109,6 +109,33 @@ test("introduce validates reference in Actions and persists only local knowledge
   assert.deepEqual(connection.configurations, []);
 });
 
+test("human and structured introduce use the same action and persist only local knowledge", async () => {
+  const humanDir = join(testRoot, "human-introduce");
+  const structuredDir = join(testRoot, "structured-introduce");
+  const humanConnection = new OpenThenRejectConnection();
+  const structuredConnection = new OpenThenRejectConnection();
+  const human = new Runtime(new PersistentCompanion(owner, humanDir), humanConnection);
+  const structured = new Runtime(new PersistentCompanion(owner, structuredDir), structuredConnection);
+  const context = defaultSelectionContext();
+
+  for (const destination of [created, created, owner]) {
+    const humanAction = await parseCommand(`introduce ${destination}`);
+    const toolAction = decodeAction({ action: "introduce", destination });
+    assert.deepEqual(humanAction, toolAction);
+    assert.deepEqual(await runAction(human, humanAction, context),
+      await runAction(structured, toolAction, context));
+  }
+  assert.deepEqual(new PersistentCompanion(owner, humanDir).destinations(), [created]);
+  assert.deepEqual(new PersistentCompanion(owner, structuredDir).destinations(), [created]);
+  assert.equal(humanConnection.submissions, 0);
+  assert.equal(structuredConnection.submissions, 0);
+  assert.deepEqual(humanConnection.configurations, []);
+  assert.deepEqual(structuredConnection.configurations, []);
+  await assert.rejects(runAction(human, await parseCommand("introduce bad/ref"), context),
+    /Conversation reference is not a safe bounded native session ID/u);
+  assert.deepEqual(human.destinations(), [created]);
+});
+
 test("send validates reference in Actions and introduces an unknown destination via Runtime", async () => {
   const connection = new OpenThenRejectConnection();
   const runtime = new Runtime(new Companion(owner), connection);

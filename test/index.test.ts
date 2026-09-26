@@ -178,7 +178,7 @@ test("bare and exact help are informational without an active Runtime or other e
   assert.equal(existsSync(join(agentDir, "companion", `${owner}.json`)), false);
   await assert.rejects(stat(conversationSocketPath(owner, tmpdir())), { code: "ENOENT" });
 
-  for (const input of ["help extra", "list", "send peer hello", "unknown"]) {
+  for (const input of ["help extra", "list", "introduce peer", "send peer hello", "unknown"]) {
     await harness.command(input);
     assert.deepEqual(harness.notifications.at(-1), {
       message: "Companion Runtime is not active for this conversation.", type: "error",
@@ -229,7 +229,7 @@ test("Pi registration preserves metadata and inactive-input error precedence", a
   assert.ok(tool);
 
   assert.equal(command.description,
-    "Create, list, message, locally forget, or show Companion help.");
+    "Create, list, introduce, message, locally forget, or show Companion help.");
   assert.equal(tool.label, "Companion");
   assert.equal(tool.description,
     "Create a live conversation, list or introduce local destinations, submit an ordinary message, or forget locally.");
@@ -255,6 +255,77 @@ test("Pi registration preserves metadata and inactive-input error precedence", a
     status: "error",
     message: "Companion Runtime is not active for this conversation.",
   });
+});
+
+test("human introduction uses the structured local-only outcome without contacting a running peer", async () => {
+  const sender = conversationReference("30800000-0000-4000-8000-000000000001");
+  const peer = conversationReference("30800000-0000-4000-8000-000000000002");
+  const senderDir = isolatedAgentDir();
+  const peerDir = isolatedAgentDir();
+  const a = new PiLifecycleHarness(sender, new TestSessionState(), senderDir);
+  const b = new PiLifecycleHarness(peer, new TestSessionState(), peerDir);
+  await a.start("startup");
+  await b.start("startup");
+  try {
+    for (const input of ["introduce", "introduce peer other"]) {
+      await a.command(input);
+      assert.deepEqual(a.notifications.at(-1), { message: humanCommand.usage, type: "error" });
+    }
+    await a.command("introduce bad/ref");
+    assert.deepEqual(a.notifications.at(-1), {
+      message: "Conversation reference is not a safe bounded native session ID.", type: "error",
+    });
+    assert.deepEqual(new PersistentCompanion(sender, senderDir).destinations(), []);
+
+    await a.command(`  introduce \t${peer}  `);
+    const humanMessage = a.notifications.at(-1);
+    assert.deepEqual(humanMessage, {
+      message: `Local introduction for ${peer} complete (repeat and self are no-ops); no peer was contacted.`,
+      type: "info",
+    });
+    const structured = await a.tool({ action: "introduce", destination: peer }) as {
+      details: unknown; content: Array<{ text: string }>;
+    };
+    assert.deepEqual(structured.details, { status: "introduced", destination: peer });
+    assert.equal(structured.content[0]?.text, humanMessage?.message);
+    await a.command(`introduce ${sender}`);
+    assert.deepEqual(a.notifications.at(-1), {
+      message: `Local introduction for ${sender} complete (repeat and self are no-ops); no peer was contacted.`,
+      type: "info",
+    });
+    assert.deepEqual(new PersistentCompanion(sender, senderDir).destinations(), [peer]);
+    assert.equal(readFileSync(join(senderDir, "companion", `${sender}.json`), "utf8"), `["${peer}"]\n`);
+    assert.deepEqual(new PersistentCompanion(peer, peerDir).destinations(), []);
+    assert.deepEqual(b.deliveries, []);
+    assert.deepEqual(a.execCalls, []);
+    assert.deepEqual(b.execCalls, []);
+  } finally {
+    await a.shutdown("quit");
+    await b.shutdown("quit");
+  }
+});
+
+test("human introduction reports storage errors without contacting Host or adopting state", async () => {
+  const sender = conversationReference("30800000-0000-4000-8000-000000000003");
+  const peer = conversationReference("30800000-0000-4000-8000-000000000004");
+  const agentDir = isolatedAgentDir();
+  const stateDirectory = join(agentDir, "companion");
+  const harness = new PiLifecycleHarness(sender, new TestSessionState(), agentDir);
+  await harness.start("startup");
+  mkdirSync(stateDirectory, { recursive: true });
+  chmodSync(stateDirectory, 0o500);
+  try {
+    await harness.command(`introduce ${peer}`);
+    assert.equal(harness.notifications.at(-1)?.type, "error");
+    assert.match(harness.notifications.at(-1)?.message ?? "", /Failed to save Companion state at/u);
+    assert.equal(harness.notifications.at(-1)?.message.includes(join(stateDirectory, `${sender}.json`)), true);
+    assert.deepEqual(new PersistentCompanion(sender, agentDir).destinations(), []);
+    assert.deepEqual(harness.execCalls, []);
+    assert.deepEqual(harness.deliveries, []);
+  } finally {
+    chmodSync(stateDirectory, 0o700);
+    await harness.shutdown("quit");
+  }
 });
 
 test("structured introduction is local; ordinary send creates reciprocal knowledge only on receipt", async () => {
